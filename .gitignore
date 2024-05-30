@@ -132,4 +132,8 @@ dmypy.json
 pyvenv.cfg
 bin/
 
+# repository metadata
 version.txt
+
+# JetBrains IDE
+.idea/

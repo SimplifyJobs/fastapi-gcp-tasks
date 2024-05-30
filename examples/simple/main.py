@@ -8,9 +8,8 @@ from fastapi.routing import APIRouter
 from pydantic.v1 import BaseModel
 
 # Imports from this repository
-from fastapi_cloud_tasks import DelayedRouteBuilder
-from fastapi_cloud_tasks.utils import emulator_client
-from fastapi_cloud_tasks.utils import queue_path
+from fastapi_gcp_tasks import DelayedRouteBuilder
+from fastapi_gcp_tasks.utils import emulator_client, queue_path
 
 # set env var IS_LOCAL=false for your deployment environment
 IS_LOCAL = os.getenv("IS_LOCAL", "true").lower() == "true"
@@ -39,6 +38,8 @@ logger = logging.getLogger("uvicorn")
 
 
 class Payload(BaseModel):
+    """Basic payload from the api."""
+
     message: str
 
 

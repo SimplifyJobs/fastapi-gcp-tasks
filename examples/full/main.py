@@ -2,16 +2,13 @@
 from uuid import uuid4
 
 # Third Party Imports
-from fastapi import FastAPI
-from fastapi import Response
-from fastapi import status
+from fastapi import FastAPI, Response, status
 from google.api_core.exceptions import AlreadyExists
 
 # Imports from this repository
 from examples.full.serializer import Payload
 from examples.full.settings import IS_LOCAL
-from examples.full.tasks import fail_twice
-from examples.full.tasks import hello
+from examples.full.tasks import fail_twice, hello
 
 app = FastAPI()
 
@@ -44,9 +41,7 @@ async def deduped(response: Response):
 @app.get("/fail")
 async def fail():
     fail_twice.delay()
-    return {
-        "message": "The triggered task will fail twice and then be marked done automatically"
-    }
+    return {"message": "The triggered task will fail twice and then be marked done automatically"}
 
 
 # We can use a trick on local to get all tasks on the same process as the main server.
