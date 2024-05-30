@@ -6,18 +6,17 @@ from fastapi.routing import APIRoute
 from google.cloud import scheduler_v1
 
 # Imports from this repository
-from fastapi_cloud_tasks.hooks import ScheduledHook
-from fastapi_cloud_tasks.hooks import noop_hook
+from fastapi_cloud_tasks.hooks import ScheduledHook, noop_hook
 from fastapi_cloud_tasks.scheduler import Scheduler
 
 
-def ScheduledRouteBuilder(
-    *,
-    base_url: str,
-    location_path: str,
-    job_create_timeout: float = 10.0,
-    pre_create_hook: ScheduledHook = None,
-    client=None,
+def ScheduledRouteBuilder(  # noqa: N802
+        *,
+        base_url: str,
+        location_path: str,
+        job_create_timeout: float = 10.0,
+        pre_create_hook: ScheduledHook = None,
+        client=None,
 ):
     """
     Returns a Mixin that should be used to override route_class.
@@ -25,6 +24,7 @@ def ScheduledRouteBuilder(
     It adds a .scheduler method to the original endpoint.
 
     Example:
+    -------
     ```
     scheduled_router = APIRouter(route_class=ScheduledRouteBuilder(...), prefix="/scheduled")
 
@@ -36,6 +36,7 @@ def ScheduledRouteBuilder(
 
     app.include_router(scheduled_router)
     ```
+
     """
     if client is None:
         client = scheduler_v1.CloudSchedulerClient()
@@ -46,22 +47,19 @@ def ScheduledRouteBuilder(
     class ScheduledRouteMixin(APIRoute):
         def get_route_handler(self) -> Callable:
             original_route_handler = super().get_route_handler()
-            self.endpoint.scheduler = self.schedulerOptions
+            self.endpoint.scheduler = self.scheduler_options
             return original_route_handler
 
-        def schedulerOptions(self, *, name, schedule, **options) -> Scheduler:
-            schedulerOpts = dict(
-                base_url=base_url,
-                location_path=location_path,
-                client=client,
-                pre_create_hook=pre_create_hook,
-                job_create_timeout=job_create_timeout,
-                name=name,
-                schedule=schedule,
-            )
-
-            schedulerOpts.update(options)
-
-            return Scheduler(route=self, **schedulerOpts)
+        def scheduler_options(self, *, name, schedule, **options) -> Scheduler:
+            scheduler_opts = {
+                                 "base_url": base_url,
+                                 "location_path": location_path,
+                                 "client": client,
+                                 "pre_create_hook": pre_create_hook,
+                                 "job_create_timeout": job_create_timeout,
+                                 "name": name,
+                                 "schedule": schedule,
+                             } | options
+            return Scheduler(route=self, **scheduler_opts)
 
     return ScheduledRouteMixin

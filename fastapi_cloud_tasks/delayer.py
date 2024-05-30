@@ -7,12 +7,27 @@ from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
 
 # Imports from this repository
-from fastapi_cloud_tasks.exception import BadMethodException
+from fastapi_cloud_tasks.exception import BadMethodError
 from fastapi_cloud_tasks.hooks import DelayedTaskHook
 from fastapi_cloud_tasks.requester import Requester
 
 
 class Delayer(Requester):
+    """
+    A class to delay HTTP requests as tasks on Google Cloud Tasks.
+
+    Attributes
+    ----------
+        queue_path (str): The path to the Cloud Tasks queue.
+        countdown (int): The delay in seconds before the task is executed.
+        task_create_timeout (float): Timeout for creating the task.
+        task_id (str): The unique identifier for the task.
+        method (tasks_v2.HttpMethod): The HTTP method for the task.
+        client (tasks_v2.CloudTasksClient): The Cloud Tasks client.
+        pre_create_hook (DelayedTaskHook): Hook to be called before creating the task.
+
+    """
+
     def __init__(
         self,
         *,
@@ -36,20 +51,19 @@ class Delayer(Requester):
         self.pre_create_hook = pre_create_hook
 
     def delay(self, **kwargs):
+        """Delay a task on Cloud Tasks."""
         # Create http request
         request = tasks_v2.HttpRequest()
         request.http_method = self.method
         request.url = self._url(values=kwargs)
         request.headers = self._headers(values=kwargs)
 
-        body = self._body(values=kwargs)
-        if body:
+        if body := self._body(values=kwargs):
             request.body = body
 
         # Scheduled the task
         task = tasks_v2.Task(http_request=request)
-        schedule_time = self._schedule()
-        if schedule_time:
+        if schedule_time := self._schedule():
             task.schedule_time = schedule_time
 
         # Make task name for deduplication
@@ -60,21 +74,21 @@ class Delayer(Requester):
 
         request = self.pre_create_hook(request)
 
-        return self.client.create_task(
-            request=request, timeout=self.task_create_timeout
-        )
+        return self.client.create_task(request=request, timeout=self.task_create_timeout)
 
     def _schedule(self):
         if self.countdown is None or self.countdown <= 0:
             return None
-        d = datetime.datetime.utcnow() + datetime.timedelta(seconds=self.countdown)
+        d = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+            seconds=self.countdown
+        )
         timestamp = timestamp_pb2.Timestamp()
         timestamp.FromDatetime(d)
         return timestamp
 
 
 def _task_method(methods):
-    methodMap = {
+    method_map = {
         "POST": tasks_v2.HttpMethod.POST,
         "GET": tasks_v2.HttpMethod.GET,
         "HEAD": tasks_v2.HttpMethod.HEAD,
@@ -86,8 +100,8 @@ def _task_method(methods):
     methods = list(methods)
     # Only crash if we're being bound
     if len(methods) > 1:
-        raise BadMethodException("Can't trigger task with multiple methods")
-    method = methodMap.get(methods[0], None)
+        raise BadMethodError("Can't trigger task with multiple methods")
+    method = method_map.get(methods[0])
     if method is None:
-        raise BadMethodException(f"Unknown method {methods[0]}")
+        raise BadMethodError(f"Unknown method {methods[0]}")
     return method

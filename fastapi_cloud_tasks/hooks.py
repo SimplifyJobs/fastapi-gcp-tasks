@@ -2,8 +2,7 @@
 from typing import Callable
 
 # Third Party Imports
-from google.cloud import scheduler_v1
-from google.cloud import tasks_v2
+from google.cloud import scheduler_v1, tasks_v2
 from google.protobuf import duration_pb2
 
 DelayedTaskHook = Callable[[tasks_v2.CreateTaskRequest], tasks_v2.CreateTaskRequest]
@@ -11,16 +10,12 @@ ScheduledHook = Callable[[scheduler_v1.CreateJobRequest], scheduler_v1.CreateJob
 
 
 def noop_hook(request):
-    """
-    Inspired by https://github.com/kelseyhightower/nocode
-    """
+    """Inspired by https://github.com/kelseyhightower/nocode."""
     return request
 
 
 def chained_hook(*hooks):
-    """
-    Call all hooks sequentially with the result from the previous hook
-    """
+    """Call all hooks sequentially with the result from the previous hook."""
 
     def chain(request):
         for hook in hooks:
@@ -32,7 +27,7 @@ def chained_hook(*hooks):
 
 def oidc_scheduled_hook(token: scheduler_v1.OidcToken) -> ScheduledHook:
     """
-    Returns a hook for ScheduledRouteBuilder to add OIDC token to all requests
+    Returns a hook for ScheduledRouteBuilder to add OIDC token to all requests.
 
     https://cloud.google.com/scheduler/docs/reference/rpc/google.cloud.scheduler.v1#google.cloud.scheduler.v1.HttpTarget
     """
@@ -48,7 +43,7 @@ def oidc_scheduled_hook(token: scheduler_v1.OidcToken) -> ScheduledHook:
 
 def oidc_delayed_hook(token: tasks_v2.OidcToken) -> DelayedTaskHook:
     """
-    Returns a hook for DelayedRouteBuilder to add OIDC token to all requests
+    Returns a hook for DelayedRouteBuilder to add OIDC token to all requests.
 
     https://cloud.google.com/tasks/docs/reference/rpc/google.cloud.tasks.v2#google.cloud.tasks.v2.HttpRequest
     """
@@ -62,7 +57,7 @@ def oidc_delayed_hook(token: tasks_v2.OidcToken) -> DelayedTaskHook:
 
 def oauth_scheduled_hook(token: scheduler_v1.OAuthToken) -> ScheduledHook:
     """
-    Returns a hook for ScheduledRouteBuilder to add OAuth token to all requests
+    Returns a hook for ScheduledRouteBuilder to add OAuth token to all requests.
 
     https://cloud.google.com/scheduler/docs/reference/rpc/google.cloud.scheduler.v1#google.cloud.scheduler.v1.HttpTarget
     """
@@ -78,7 +73,7 @@ def oauth_scheduled_hook(token: scheduler_v1.OAuthToken) -> ScheduledHook:
 
 def oauth_delayed_hook(token: tasks_v2.OAuthToken) -> DelayedTaskHook:
     """
-    Returns a hook for DelayedRouteBuilder to add OAuth token to all requests
+    Returns a hook for DelayedRouteBuilder to add OAuth token to all requests.
 
     https://cloud.google.com/tasks/docs/reference/rpc/google.cloud.tasks.v2#google.cloud.tasks.v2.HttpRequest
     """
@@ -92,7 +87,7 @@ def oauth_delayed_hook(token: tasks_v2.OAuthToken) -> DelayedTaskHook:
 
 def deadline_scheduled_hook(duration: duration_pb2.Duration) -> ScheduledHook:
     """
-    Returns a hook for ScheduledRouteBuilder to set Deadline for job execution
+    Returns a hook for ScheduledRouteBuilder to set Deadline for job execution.
 
     https://cloud.google.com/scheduler/docs/reference/rpc/google.cloud.scheduler.v1#google.cloud.scheduler.v1.Job
     """
@@ -108,7 +103,7 @@ def deadline_scheduled_hook(duration: duration_pb2.Duration) -> ScheduledHook:
 
 def deadline_delayed_hook(duration: duration_pb2.Duration) -> DelayedTaskHook:
     """
-    Returns a hook for DelayedRouteBuilder to set Deadline for task execution
+    Returns a hook for DelayedRouteBuilder to set Deadline for task execution.
 
     https://cloud.google.com/tasks/docs/reference/rpc/google.cloud.tasks.v2#google.cloud.tasks.v2.Task
     """

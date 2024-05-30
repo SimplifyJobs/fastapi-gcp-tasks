@@ -3,15 +3,11 @@ import typing
 from datetime import datetime
 
 # Third Party Imports
-from fastapi import Depends
-from fastapi import Header
-from fastapi import HTTPException
+from fastapi import Depends, Header, HTTPException
 
 
 def max_retries(count: int = 20):
-    """
-    Raises a http exception (with status 200) after max retries are exhausted
-    """
+    """Raises a http exception (with status 200) after max retries are exhausted."""
 
     def retries_dep(meta: CloudTasksHeaders = Depends()) -> bool:
         # count starts from 0 so equality check is required
@@ -23,7 +19,7 @@ def max_retries(count: int = 20):
 
 class CloudTasksHeaders:
     """
-    Extracts known headers sent by Cloud Tasks
+    Extracts known headers sent by Cloud Tasks.
 
     Full list: https://cloud.google.com/tasks/docs/creating-http-target-tasks#handler
     """
