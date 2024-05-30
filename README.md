@@ -1,6 +1,6 @@
 # FastAPI Cloud Tasks
 
-Strongly typed background tasks with FastAPI and Google CloudTasks. This is a fork of [fastapi-gcp-tasks](https://github.com/adori/fastapi-gcp-tasks), updated with new features and bug fixes.
+Strongly typed background tasks with FastAPI and Google Cloud Run, Tasks and Scheduler. This is a fork of [fastapi-gcp-tasks](https://github.com/adori/fastapi-cloud-tasks), updated with new features and bug fixes.
 
 ```mermaid
 sequenceDiagram
@@ -375,7 +375,7 @@ Check the file [fastapi_cloud_tasks/dependencies.py](fastapi_gcp_tasks/dependenc
 
 ## License
 
-This project is licensed under the terms of the MIT license. This project was forked from [fastapi-gcp-tasks](https://github.com/Adori/fastapi-gcp-tasks) under the MIT license. All changes made to the original project are also licensed under the MIT license.
+This project is licensed under the terms of the MIT license. This project was forked from [fastapi-gcp-tasks](https://github.com/Adori/fastapi-cloud-tasks) under the MIT license. All changes made to the original project are also licensed under the MIT license.
 
 ## Disclaimer
 
