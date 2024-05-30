@@ -6,19 +6,19 @@ from fastapi.routing import APIRoute
 from google.cloud import tasks_v2
 
 # Imports from this repository
-from fastapi_cloud_tasks.delayer import Delayer
-from fastapi_cloud_tasks.hooks import DelayedTaskHook, noop_hook
-from fastapi_cloud_tasks.utils import ensure_queue
+from fastapi_gcp_tasks.delayer import Delayer
+from fastapi_gcp_tasks.hooks import DelayedTaskHook, noop_hook
+from fastapi_gcp_tasks.utils import ensure_queue
 
 
 def DelayedRouteBuilder(  # noqa: N802
-        *,
-        base_url: str,
-        queue_path: str,
-        task_create_timeout: float = 10.0,
-        pre_create_hook: DelayedTaskHook = None,
-        client=None,
-        auto_create_queue=True,
+    *,
+    base_url: str,
+    queue_path: str,
+    task_create_timeout: float = 10.0,
+    pre_create_hook: DelayedTaskHook = None,
+    client=None,
+    auto_create_queue=True,
 ):
     """
     Returns a Mixin that should be used to override route_class.

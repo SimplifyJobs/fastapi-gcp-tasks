@@ -7,9 +7,9 @@ from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
 
 # Imports from this repository
-from fastapi_cloud_tasks.exception import BadMethodError
-from fastapi_cloud_tasks.hooks import DelayedTaskHook
-from fastapi_cloud_tasks.requester import Requester
+from fastapi_gcp_tasks.exception import BadMethodError
+from fastapi_gcp_tasks.hooks import DelayedTaskHook
+from fastapi_gcp_tasks.requester import Requester
 
 
 class Delayer(Requester):
@@ -79,9 +79,7 @@ class Delayer(Requester):
     def _schedule(self):
         if self.countdown is None or self.countdown <= 0:
             return None
-        d = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
-            seconds=self.countdown
-        )
+        d = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=self.countdown)
         timestamp = timestamp_pb2.Timestamp()
         timestamp.FromDatetime(d)
         return timestamp

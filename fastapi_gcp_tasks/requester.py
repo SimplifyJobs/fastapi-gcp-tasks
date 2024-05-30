@@ -9,7 +9,7 @@ from fastapi.routing import APIRoute
 from pydantic.v1.error_wrappers import ErrorWrapper
 
 # Imports from this repository
-from fastapi_cloud_tasks.exception import MissingParamError, WrongTypeError
+from fastapi_gcp_tasks.exception import MissingParamError, WrongTypeError
 
 try:
     # Third Party Imports

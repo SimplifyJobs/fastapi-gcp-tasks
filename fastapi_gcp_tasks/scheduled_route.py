@@ -6,17 +6,17 @@ from fastapi.routing import APIRoute
 from google.cloud import scheduler_v1
 
 # Imports from this repository
-from fastapi_cloud_tasks.hooks import ScheduledHook, noop_hook
-from fastapi_cloud_tasks.scheduler import Scheduler
+from fastapi_gcp_tasks.hooks import ScheduledHook, noop_hook
+from fastapi_gcp_tasks.scheduler import Scheduler
 
 
 def ScheduledRouteBuilder(  # noqa: N802
-        *,
-        base_url: str,
-        location_path: str,
-        job_create_timeout: float = 10.0,
-        pre_create_hook: ScheduledHook = None,
-        client=None,
+    *,
+    base_url: str,
+    location_path: str,
+    job_create_timeout: float = 10.0,
+    pre_create_hook: ScheduledHook = None,
+    client=None,
 ):
     """
     Returns a Mixin that should be used to override route_class.
@@ -52,14 +52,14 @@ def ScheduledRouteBuilder(  # noqa: N802
 
         def scheduler_options(self, *, name, schedule, **options) -> Scheduler:
             scheduler_opts = {
-                                 "base_url": base_url,
-                                 "location_path": location_path,
-                                 "client": client,
-                                 "pre_create_hook": pre_create_hook,
-                                 "job_create_timeout": job_create_timeout,
-                                 "name": name,
-                                 "schedule": schedule,
-                             } | options
+                "base_url": base_url,
+                "location_path": location_path,
+                "client": client,
+                "pre_create_hook": pre_create_hook,
+                "job_create_timeout": job_create_timeout,
+                "name": name,
+                "schedule": schedule,
+            } | options
             return Scheduler(route=self, **scheduler_opts)
 
     return ScheduledRouteMixin

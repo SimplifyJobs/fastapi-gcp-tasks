@@ -6,9 +6,9 @@ from google.cloud import scheduler_v1
 from google.protobuf import duration_pb2
 
 # Imports from this repository
-from fastapi_cloud_tasks.exception import BadMethodError
-from fastapi_cloud_tasks.hooks import ScheduledHook
-from fastapi_cloud_tasks.requester import Requester
+from fastapi_gcp_tasks.exception import BadMethodError
+from fastapi_gcp_tasks.hooks import ScheduledHook
+from fastapi_gcp_tasks.requester import Requester
 
 
 class Scheduler(Requester):

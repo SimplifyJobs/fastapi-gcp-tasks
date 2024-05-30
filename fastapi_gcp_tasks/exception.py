@@ -3,6 +3,7 @@ from pydantic.v1.errors import MissingError, PydanticValueError
 
 # TODO: Migrate to Pydantic v2.0 Errors
 
+
 class MissingParamError(MissingError):
     """Error raised when a required parameter is missing."""
 
