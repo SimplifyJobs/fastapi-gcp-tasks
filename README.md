@@ -61,16 +61,20 @@ pip install fastapi-cloud-tasks
 ### Delayed job
 
 ```python
-from fastapi_cloud_tasks import DelayedRouteBuilder
+from fastapi_gcp_tasks import DelayedRouteBuilder
 
 delayed_router = APIRouter(route_class=DelayedRouteBuilder(...))
 
+
 class Recipe(BaseModel):
-    ingredients: List[str]
+  ingredients: List[str]
+
 
 @delayed_router.post("/{restaurant}/make_dinner")
 async def make_dinner(restaurant: str, recipe: Recipe):
-    # Do a ton of work here.
+
+
+# Do a ton of work here.
 
 
 app.include_router(delayed_router)
@@ -89,22 +93,28 @@ make_dinner.options(countdown=1800).delay(...)
 ```
 
 ### Scheduled Task
+
 ```python
-from fastapi_cloud_tasks import ScheduledRouteBuilder
+from fastapi_gcp_tasks import ScheduledRouteBuilder
 
 scheduled_router = APIRouter(route_class=ScheduledRouteBuilder(...))
 
+
 class Recipe(BaseModel):
-    ingredients: List[str]
+  ingredients: List[str]
+
 
 @scheduled_router.post("/home_cook")
 async def home_cook(recipe: Recipe):
-    # Make my own food
+
+
+# Make my own food
 
 app.include_router(scheduled_router)
 
 # If you want to make your own breakfast every morning at 7AM IST.
-home_cook.scheduler(name="test-home-cook-at-7AM-IST", schedule="0 7 * * *", time_zone="Asia/Kolkata").schedule(recipe=Recipe(ingredients=["Milk","Cereal"]))
+home_cook.scheduler(name="test-home-cook-at-7AM-IST", schedule="0 7 * * *", time_zone="Asia/Kolkata").schedule(
+  recipe=Recipe(ingredients=["Milk", "Cereal"]))
 ```
 
 ## Concept
@@ -238,7 +248,7 @@ Check the fleshed out example at [`examples/full/tasks.py`](examples/full/tasks.
 
 If you're not running on CloudRun and want to an OAuth Token instead, you can use the `oauth_task_hook` instead.
 
-Check [fastapi_cloud_tasks/hooks.py](fastapi_cloud_tasks/hooks.py) to get the hang od hooks and how you can use them.
+Check [fastapi_cloud_tasks/hooks.py](fastapi_gcp_tasks/hooks.py) to get the hang od hooks and how you can use them.
 
 ## Configuration
 
@@ -355,7 +365,7 @@ async def my_task(ct_headers: CloudTasksHeaders = Depends()):
     print(ct_headers.queue_name)
 ```
 
-Check the file [fastapi_cloud_tasks/dependencies.py](fastapi_cloud_tasks/dependencies.py) for details.
+Check the file [fastapi_cloud_tasks/dependencies.py](fastapi_gcp_tasks/dependencies.py) for details.
 
 ## Contributing
 
@@ -363,4 +373,10 @@ Check the file [fastapi_cloud_tasks/dependencies.py](fastapi_cloud_tasks/depende
 - Make changes and raise a PR!
 - If the change is massive, open an issue to discuss it before writing code.
 
-Note: This project is neither affiliated with, nor sponsored by Google.
+## License
+
+This project is licensed under the terms of the MIT license. This project was forked from [fastapi-cloud-tasks](https://github.com/Adori/fastapi-cloud-tasks) under the MIT license. All changes made to the original project are also licensed under the MIT license.
+
+## Disclaimer
+
+This project is neither affiliated with, nor sponsored by Google.
