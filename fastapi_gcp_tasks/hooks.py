@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Callable
+from typing import Any, Callable
 
 # Third Party Imports
 from google.cloud import scheduler_v1, tasks_v2
@@ -9,15 +9,15 @@ DelayedTaskHook = Callable[[tasks_v2.CreateTaskRequest], tasks_v2.CreateTaskRequ
 ScheduledHook = Callable[[scheduler_v1.CreateJobRequest], scheduler_v1.CreateJobRequest]
 
 
-def noop_hook(request):
+def noop_hook(request: Any) -> Any:
     """Inspired by https://github.com/kelseyhightower/nocode."""
     return request
 
 
-def chained_hook(*hooks):
+def chained_hook(*hooks: Callable[[Any], Any]) -> Callable[[Any], Any]:
     """Call all hooks sequentially with the result from the previous hook."""
 
-    def chain(request):
+    def chain(request: Any) -> Any:
         for hook in hooks:
             request = hook(request)
         return request

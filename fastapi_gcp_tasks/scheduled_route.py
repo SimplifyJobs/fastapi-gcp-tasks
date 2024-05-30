@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Callable
+from typing import Callable, Type
 
 # Third Party Imports
 from fastapi.routing import APIRoute
@@ -15,9 +15,9 @@ def ScheduledRouteBuilder(  # noqa: N802
     base_url: str,
     location_path: str,
     job_create_timeout: float = 10.0,
-    pre_create_hook: ScheduledHook = None,
-    client=None,
-):
+    pre_create_hook: ScheduledHook | None = None,
+    client: scheduler_v1.CloudSchedulerClient | None = None,
+) -> Type[APIRoute]:
     """
     Returns a Mixin that should be used to override route_class.
 
@@ -47,10 +47,10 @@ def ScheduledRouteBuilder(  # noqa: N802
     class ScheduledRouteMixin(APIRoute):
         def get_route_handler(self) -> Callable:
             original_route_handler = super().get_route_handler()
-            self.endpoint.scheduler = self.scheduler_options
+            self.endpoint.scheduler = self.scheduler_options  # type: ignore[attr-defined]
             return original_route_handler
 
-        def scheduler_options(self, *, name, schedule, **options) -> Scheduler:
+        def scheduler_options(self, *, name: str, schedule: str, **options: dict) -> Scheduler:
             scheduler_opts = {
                 "base_url": base_url,
                 "location_path": location_path,
@@ -60,6 +60,8 @@ def ScheduledRouteBuilder(  # noqa: N802
                 "name": name,
                 "schedule": schedule,
             } | options
-            return Scheduler(route=self, **scheduler_opts)
+
+            # ignoring the type here because the dictionary values are unpacked
+            return Scheduler(route=self, **scheduler_opts)  # type: ignore[arg-type]
 
     return ScheduledRouteMixin

@@ -1,5 +1,6 @@
 # Standard Library Imports
 import datetime
+from typing import Any, Iterable
 
 # Third Party Imports
 from fastapi.routing import APIRoute
@@ -38,7 +39,7 @@ class Delayer(Requester):
         pre_create_hook: DelayedTaskHook,
         task_create_timeout: float = 10.0,
         countdown: int = 0,
-        task_id: str = None,
+        task_id: str | None = None,
     ) -> None:
         super().__init__(route=route, base_url=base_url)
         self.queue_path = queue_path
@@ -50,7 +51,7 @@ class Delayer(Requester):
         self.client = client
         self.pre_create_hook = pre_create_hook
 
-    def delay(self, **kwargs):
+    def delay(self, **kwargs: Any) -> tasks_v2.Task:
         """Delay a task on Cloud Tasks."""
         # Create http request
         request = tasks_v2.HttpRequest()
@@ -76,7 +77,7 @@ class Delayer(Requester):
 
         return self.client.create_task(request=request, timeout=self.task_create_timeout)
 
-    def _schedule(self):
+    def _schedule(self) -> timestamp_pb2.Timestamp | None:
         if self.countdown is None or self.countdown <= 0:
             return None
         d = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=self.countdown)
@@ -85,7 +86,7 @@ class Delayer(Requester):
         return timestamp
 
 
-def _task_method(methods):
+def _task_method(methods: Iterable[str]) -> tasks_v2.HttpMethod:
     method_map = {
         "POST": tasks_v2.HttpMethod.POST,
         "GET": tasks_v2.HttpMethod.GET,
@@ -102,4 +103,4 @@ def _task_method(methods):
     method = method_map.get(methods[0])
     if method is None:
         raise BadMethodError(f"Unknown method {methods[0]}")
-    return method
+    return tasks_v2.HttpMethod(method)

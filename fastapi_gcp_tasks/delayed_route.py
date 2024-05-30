@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Callable
+from typing import Callable, Type
 
 # Third Party Imports
 from fastapi.routing import APIRoute
@@ -16,10 +16,10 @@ def DelayedRouteBuilder(  # noqa: N802
     base_url: str,
     queue_path: str,
     task_create_timeout: float = 10.0,
-    pre_create_hook: DelayedTaskHook = None,
-    client=None,
-    auto_create_queue=True,
-):
+    pre_create_hook: DelayedTaskHook | None = None,
+    client: tasks_v2.CloudTasksClient | None = None,
+    auto_create_queue: bool = True,
+) -> Type[APIRoute]:
     """
     Returns a Mixin that should be used to override route_class.
 
@@ -57,11 +57,11 @@ def DelayedRouteBuilder(  # noqa: N802
     class TaskRouteMixin(APIRoute):
         def get_route_handler(self) -> Callable:
             original_route_handler = super().get_route_handler()
-            self.endpoint.options = self.delay_options
-            self.endpoint.delay = self.delay
+            self.endpoint.options = self.delay_options  # type: ignore[attr-defined]
+            self.endpoint.delay = self.delay  # type: ignore[attr-defined]
             return original_route_handler
 
-        def delay_options(self, **options) -> Delayer:
+        def delay_options(self, **options: dict) -> Delayer:
             delay_opts = {
                 "base_url": base_url,
                 "queue_path": queue_path,
@@ -73,12 +73,13 @@ def DelayedRouteBuilder(  # noqa: N802
                 delay_opts |= self.endpoint._delay_options
             delay_opts |= options
 
+            # ignoring the type here because the dictionary values are unpacked
             return Delayer(
                 route=self,
-                **delay_opts,
+                **delay_opts,  # type: ignore[arg-type]
             )
 
-        def delay(self, **kwargs):
+        def delay(self, **kwargs: dict) -> tasks_v2.Task:
             return self.delay_options().delay(**kwargs)
 
     return TaskRouteMixin

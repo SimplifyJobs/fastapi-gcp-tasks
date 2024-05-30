@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 # Third Party Imports
@@ -16,7 +16,7 @@ try:
     import ujson as json
 except ImportError:
     # Standard Library Imports
-    import json
+    import json  # type: ignore[no-redef]
 
 
 class Requester:
@@ -39,7 +39,7 @@ class Requester:
         self.route = route
         self.base_url = base_url.rstrip("/")
 
-    def _headers(self, *, values):
+    def _headers(self, *, values: Dict[str, Any]) -> Dict[str, str]:
         headers = _err_val(request_params_to_args(self.route.dependant.header_params, values))
         cookies = _err_val(request_params_to_args(self.route.dependant.cookie_params, values))
         if len(cookies) > 0:
@@ -49,7 +49,7 @@ class Requester:
         # Always send string headers and skip all headers which are supposed to be sent by cloudtasks
         return {str(k): str(v) for (k, v) in headers.items() if not str(k).startswith("x_cloudtasks_")}
 
-    def _url(self, *, values):
+    def _url(self, *, values: Dict[str, Any]) -> str:
         route = self.route
         path_values = _err_val(request_params_to_args(route.dependant.path_params, values))
         for name, converter in route.param_convertors.items():
@@ -80,11 +80,11 @@ class Requester:
         url_parts[4] = urlencode(query)
         return urlunparse(url_parts)
 
-    def _body(self, *, values):
+    def _body(self, *, values: Dict[str, Any]) -> bytes | None:
         body = None
         body_field = self.route.body_field
         if body_field and body_field.name:
-            got_body = values.get(body_field.name, None)
+            got_body = values.get(body_field.name)
             if got_body is None:
                 if body_field.required:
                     raise MissingParamError(name=body_field.name)
@@ -95,7 +95,7 @@ class Requester:
         return body
 
 
-def _err_val(resp: Tuple[Dict, List[ErrorWrapper]]):
+def _err_val(resp: Tuple[Dict, List[ErrorWrapper]]) -> Dict:
     values, errors = resp
 
     if len(errors) != 0:

@@ -1,16 +1,18 @@
 # Third Party Imports
+from typing import Any
+
 import grpc
 from google.api_core.exceptions import AlreadyExists
 from google.cloud import scheduler_v1, tasks_v2
 from google.cloud.tasks_v2.services.cloud_tasks import transports
 
 
-def location_path(*, project: str, location: str, **ignored):
+def location_path(*, project: str, location: str) -> str:
     """Helper function to construct a location path for Cloud Scheduler."""
     return scheduler_v1.CloudSchedulerClient.common_location_path(project=project, location=location)
 
 
-def queue_path(*, project: str, location: str, queue: str):
+def queue_path(*, project: str, location: str, queue: str) -> str:
     """Helper function to construct a queue path for Cloud Tasks."""
     return tasks_v2.CloudTasksClient.queue_path(project=project, location=location, queue=queue)
 
@@ -19,8 +21,8 @@ def ensure_queue(
     *,
     client: tasks_v2.CloudTasksClient,
     path: str,
-    **kwargs,
-):
+    **kwargs: Any,
+) -> None:
     """
     Helper function to ensure a Cloud Tasks queue exists.
 
@@ -39,7 +41,7 @@ def ensure_queue(
         pass
 
 
-def emulator_client(*, host="localhost:8123"):
+def emulator_client(*, host: str = "localhost:8123") -> tasks_v2.CloudTasksClient:
     """Helper function to create a CloudTasksClient from an emulator host."""
     channel = grpc.insecure_channel(host)
     transport = transports.CloudTasksGrpcTransport(channel=channel)

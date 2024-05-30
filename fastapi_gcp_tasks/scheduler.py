@@ -1,4 +1,5 @@
 # Standard Library Imports
+from typing import Any, Iterable
 
 # Third Party Imports
 from fastapi.routing import APIRoute
@@ -41,7 +42,7 @@ class Scheduler(Requester):
         pre_create_hook: ScheduledHook,
         name: str = "",
         job_create_timeout: float = 10.0,
-        retry_config: scheduler_v1.RetryConfig = None,
+        retry_config: scheduler_v1.RetryConfig | None = None,
         time_zone: str = "UTC",
         force: bool = False,
     ) -> None:
@@ -73,7 +74,7 @@ class Scheduler(Requester):
         self.pre_create_hook = pre_create_hook
         self.force = force
 
-    def schedule(self, **kwargs):
+    def schedule(self, **kwargs: Any) -> None:
         """Schedule a job on Cloud Scheduler."""
         # Create http request
         request = scheduler_v1.HttpTarget()
@@ -103,15 +104,15 @@ class Scheduler(Requester):
             self.delete()
             self.client.create_job(request=request, timeout=self.job_create_timeout)
 
-    def _has_changed(self, request: scheduler_v1.CreateJobRequest):
+    def _has_changed(self, request: scheduler_v1.CreateJobRequest) -> bool:
         try:
             job = self.client.get_job(name=request.job.name)
             # Remove things that are either output only or GCP adds by default
-            job.user_update_time = None
-            job.state = None
+            job.user_update_time = None  # type: ignore[assignment]
+            job.state = None  # type: ignore[assignment]
             job.status = None
-            job.last_attempt_time = None
-            job.schedule_time = None
+            job.last_attempt_time = None  # type: ignore[assignment]
+            job.schedule_time = None  # type: ignore[assignment]
             del job.http_target.headers["User-Agent"]
             # Proto compare works directly with `__eq__`
             return job != request.job
@@ -120,7 +121,7 @@ class Scheduler(Requester):
             return True
         return False
 
-    def delete(self):
+    def delete(self) -> bool | Exception:
         """Delete the job from the scheduler if it exists."""
         # We return true or exception because you could have the delete code on multiple instances
         try:
@@ -131,7 +132,7 @@ class Scheduler(Requester):
             return ex
 
 
-def _scheduler_method(methods):
+def _scheduler_method(methods: Iterable[str]) -> scheduler_v1.HttpMethod:
     method_map = {
         "POST": scheduler_v1.HttpMethod.POST,
         "GET": scheduler_v1.HttpMethod.GET,
@@ -148,4 +149,4 @@ def _scheduler_method(methods):
     method = method_map.get(methods[0])
     if method is None:
         raise BadMethodError(f"Unknown method {methods[0]}")
-    return method
+    return scheduler_v1.HttpMethod(method)
