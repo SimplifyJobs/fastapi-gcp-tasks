@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fastapi-gcp-tasks"
-version = "0.1.0"
+version = "0.1.1"
 description = "Trigger delayed Cloud Tasks from FastAPI"
 readme = "README.md"
 license = "MIT"
