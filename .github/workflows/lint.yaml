@@ -3,14 +3,14 @@ name: lint
 on:
   push:
     branches:
-      - main
+      - master
   pull_request:
     types:
       - opened
       - synchronize
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
