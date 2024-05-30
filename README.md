@@ -301,7 +301,7 @@ Usage:
 simple_task.options(...).delay()
 ```
 
-All options from above can be overriden per call (including DelayedRouteBuilder options like `base_url`) with kwargs to the `options` function before calling delay.
+All options from above can be overwritten per call (including DelayedRouteBuilder options like `base_url`) with kwargs to the `options` function before calling delay.
 
 Example:
 
