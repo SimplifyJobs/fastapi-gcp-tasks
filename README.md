@@ -1,6 +1,6 @@
 # FastAPI Cloud Tasks
 
-Strongly typed background tasks with FastAPI and Google CloudTasks.
+Strongly typed background tasks with FastAPI and Google CloudTasks. This is a fork of [fastapi-gcp-tasks](https://github.com/adori/fastapi-gcp-tasks), updated with new features and bug fixes.
 
 ```mermaid
 sequenceDiagram
@@ -30,7 +30,7 @@ sequenceDiagram
 ## Installation
 
 ```
-pip install fastapi-cloud-tasks
+pip install fastapi-gcp-tasks
 ```
 
 ## Key features
@@ -138,7 +138,7 @@ FastAPI Cloud Tasks works by putting the three together:
 ### Local
 
 Pre-requisites:
-- `pip install fastapi-cloud-tasks`
+- `pip install fastapi-gcp-tasks`
 - Install [cloud-tasks-emulator](https://github.com/aertje/cloud-tasks-emulator)
   - Alternatively install ngrok and forward the server's port
 
@@ -237,7 +237,7 @@ DelayedRoute = DelayedRouteBuilder(
     pre_create_hook=oidc_task_hook(
         token=tasks_v2.OidcToken(
             # Service account that you created
-            service_account_email="fastapi-cloud-tasks@gcp-project-id.iam.gserviceaccount.com",
+            service_account_email="fastapi-gcp-tasks@gcp-project-id.iam.gserviceaccount.com",
             audience=base_url,
         ),
     ),
@@ -369,13 +369,13 @@ Check the file [fastapi_cloud_tasks/dependencies.py](fastapi_gcp_tasks/dependenc
 
 ## Contributing
 
-- Run `pre-commit install` on your local to get pre-commit hook.
-- Make changes and raise a PR!
+- Run the `format.sh` and `lint.sh` scripts before raising a PR.
+- Add examples and/or tests for new features.
 - If the change is massive, open an issue to discuss it before writing code.
 
 ## License
 
-This project is licensed under the terms of the MIT license. This project was forked from [fastapi-cloud-tasks](https://github.com/Adori/fastapi-cloud-tasks) under the MIT license. All changes made to the original project are also licensed under the MIT license.
+This project is licensed under the terms of the MIT license. This project was forked from [fastapi-gcp-tasks](https://github.com/Adori/fastapi-gcp-tasks) under the MIT license. All changes made to the original project are also licensed under the MIT license.
 
 ## Disclaimer
 

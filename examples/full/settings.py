@@ -23,7 +23,7 @@ CLOUD_TASKS_EMULATOR_URL = os.getenv("CLOUD_TASKS_EMULATOR_URL", "localhost:8123
 
 TASK_SERVICE_ACCOUNT = os.getenv(
     "TASK_SERVICE_ACCOUNT",
-    default=f"fastapi-cloud-tasks@{TASK_PROJECT_ID}.iam.gserviceaccount.com",
+    default=f"fastapi-gcp-tasks@{TASK_PROJECT_ID}.iam.gserviceaccount.com",
 )
 
 TASK_QUEUE_PATH = queue_path(
