@@ -2,12 +2,10 @@
 import os
 
 # Third Party Imports
-from google.cloud import scheduler_v1
-from google.cloud import tasks_v2
+from google.cloud import scheduler_v1, tasks_v2
 
 # Imports from this repository
-from fastapi_cloud_tasks.utils import location_path
-from fastapi_cloud_tasks.utils import queue_path
+from fastapi_gcp_tasks.utils import location_path, queue_path
 
 # set env var IS_LOCAL=false for your deployment environment
 IS_LOCAL = os.getenv("IS_LOCAL", "true").lower() == "true"
@@ -15,9 +13,7 @@ IS_LOCAL = os.getenv("IS_LOCAL", "true").lower() == "true"
 # The suffix _fastapi_cloud_tasks is a trick for running both main and task server in the same process for local
 # In a deployed environment, you'd most likely want them to be separate
 # Check main.py for how this is used.
-TASK_LISTENER_BASE_URL = os.getenv(
-    "TASK_LISTENER_BASE_URL", default="http://localhost:8000/_fastapi_cloud_tasks"
-)
+TASK_LISTENER_BASE_URL = os.getenv("TASK_LISTENER_BASE_URL", default="http://localhost:8000/_fastapi_cloud_tasks")
 TASK_PROJECT_ID = os.getenv("TASK_PROJECT_ID", default="sample-project")
 TASK_LOCATION = os.getenv("TASK_LOCATION", default="asia-south1")
 SCHEDULED_LOCATION = os.getenv("SCHEDULED_LOCATION", default="us-central1")
@@ -41,9 +37,7 @@ SCHEDULED_LOCATION_PATH = location_path(
     location=SCHEDULED_LOCATION,
 )
 
-TASK_OIDC_TOKEN = tasks_v2.OidcToken(
-    service_account_email=TASK_SERVICE_ACCOUNT, audience=TASK_LISTENER_BASE_URL
-)
+TASK_OIDC_TOKEN = tasks_v2.OidcToken(service_account_email=TASK_SERVICE_ACCOUNT, audience=TASK_LISTENER_BASE_URL)
 SCHEDULED_OIDC_TOKEN = scheduler_v1.OidcToken(
     service_account_email=TASK_SERVICE_ACCOUNT, audience=TASK_LISTENER_BASE_URL
 )
