@@ -17,12 +17,7 @@ def queue_path(*, project: str, location: str, queue: str) -> str:
     return tasks_v2.CloudTasksClient.queue_path(project=project, location=location, queue=queue)
 
 
-def ensure_queue(
-    *,
-    client: tasks_v2.CloudTasksClient,
-    path: str,
-    **kwargs: Any,
-) -> None:
+def ensure_queue(*, client: tasks_v2.CloudTasksClient, path: str, **kwargs: Any) -> None:
     """
     Helper function to ensure a Cloud Tasks queue exists.
 
@@ -32,7 +27,11 @@ def ensure_queue(
     # We extract information from the queue path to make the public api simpler
     parsed_queue_path = client.parse_queue_path(path=path)
     create_req = tasks_v2.CreateQueueRequest(
-        parent=location_path(**parsed_queue_path),
+        parent=queue_path(
+            project=parsed_queue_path["project"],
+            location=parsed_queue_path["location"],
+            queue=parsed_queue_path["queue"],
+        ),
         queue=tasks_v2.Queue(name=path, **kwargs),
     )
     try:
