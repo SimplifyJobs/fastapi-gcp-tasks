@@ -26,21 +26,16 @@ def ensure_queue(*, client: tasks_v2.CloudTasksClient, path: str, **kwargs: Any)
     """
     # We extract information from the queue path to make the public api simpler
     parsed_queue_path = client.parse_queue_path(path=path)
-    create_req = tasks_v2.CreateQueueRequest(
-        parent=queue_path(
-            project=parsed_queue_path["project"],
-            location=parsed_queue_path["location"],
-            queue=parsed_queue_path["queue"],
-        ),
-        queue=tasks_v2.Queue(name=path, **kwargs),
-    )
+
+    location = 'projects/{project}/locations/{location}'.format(project=parsed_queue_path['project'], location=parsed_queue_path['location'])
+    create_req = tasks_v2.CreateQueueRequest(parent=location, queue=tasks_v2.Queue(name=path, **kwargs))
     try:
         client.create_queue(request=create_req)
     except AlreadyExists:
         pass
 
 
-def emulator_client(*, host: str = "localhost:8123") -> tasks_v2.CloudTasksClient:
+def emulator_client(*, host: str = 'localhost:8123') -> tasks_v2.CloudTasksClient:
     """Helper function to create a CloudTasksClient from an emulator host."""
     channel = grpc.insecure_channel(host)
     transport = transports.CloudTasksGrpcTransport(channel=channel)
