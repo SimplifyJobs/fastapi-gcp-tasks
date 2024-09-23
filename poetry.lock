@@ -321,13 +321,13 @@ protobuf = ">=3.20.2,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4
 
 [[package]]
 name = "google-cloud-tasks"
-version = "2.16.4"
+version = "2.16.5"
 description = "Google Cloud Tasks API client library"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "google-cloud-tasks-2.16.4.tar.gz", hash = "sha256:61033c1edd7dc5aa3b9fbe5c8deb64be0c50e0baee9d9465f3f8b75b2cda55b9"},
-    {file = "google_cloud_tasks-2.16.4-py2.py3-none-any.whl", hash = "sha256:7db2b364ded9c2e0143b2794d1ae53ef7461a99567698e3e4ba9e02b614e1adb"},
+    {file = "google_cloud_tasks-2.16.5-py2.py3-none-any.whl", hash = "sha256:662d3eba82238fd48dee55f780a31f0990e3869b1df04126759a84cd0d83a598"},
+    {file = "google_cloud_tasks-2.16.5.tar.gz", hash = "sha256:8bdc294a09e34647e120a2e40dd7ec20873024d5f4e0938b2ff0c39ff374edac"},
 ]
 
 [package.dependencies]
