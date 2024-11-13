@@ -247,19 +247,22 @@ requests = ["requests (>=2.20.0,<3.0.0.dev0)"]
 
 [[package]]
 name = "google-cloud-scheduler"
-version = "2.13.5"
+version = "2.14.0"
 description = "Google Cloud Scheduler API client library"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "google_cloud_scheduler-2.13.5-py2.py3-none-any.whl", hash = "sha256:3c385f7cdeed283e170ee58db25d8a942acab93298958d854019c2dc368b8f1a"},
-    {file = "google_cloud_scheduler-2.13.5.tar.gz", hash = "sha256:3f91ce3b2c98834036cc68ad23aa987df9fe2176e9d47e32484c01d301e37b81"},
+    {file = "google_cloud_scheduler-2.14.0-py2.py3-none-any.whl", hash = "sha256:308b955192530980660c44ca2e1b74ae61fbda08ca1ffb55c5f14b8b54f65629"},
+    {file = "google_cloud_scheduler-2.14.0.tar.gz", hash = "sha256:8ed3058f21d11a262fd8449cb8fcda06c4d62417046f524f0fd5ed260ed52e86"},
 ]
 
 [package.dependencies]
 google-api-core = {version = ">=1.34.1,<2.0.dev0 || >=2.11.dev0,<3.0.0dev", extras = ["grpc"]}
 google-auth = ">=2.14.1,<2.24.0 || >2.24.0,<2.25.0 || >2.25.0,<3.0.0dev"
-proto-plus = ">=1.22.3,<2.0.0dev"
+proto-plus = [
+    {version = ">=1.25.0,<2.0.0dev", markers = "python_version >= \"3.13\""},
+    {version = ">=1.22.3,<2.0.0dev", markers = "python_version < \"3.13\""},
+]
 protobuf = ">=3.20.2,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<6.0.0dev"
 
 [[package]]
@@ -489,6 +492,23 @@ protobuf = ">=3.19.0,<5.0.0dev"
 
 [package.extras]
 testing = ["google-api-core[grpc] (>=1.31.5)"]
+
+[[package]]
+name = "proto-plus"
+version = "1.25.0"
+description = "Beautiful, Pythonic protocol buffers."
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "proto_plus-1.25.0-py3-none-any.whl", hash = "sha256:c91fc4a65074ade8e458e95ef8bac34d4008daa7cce4a12d6707066fca648961"},
+    {file = "proto_plus-1.25.0.tar.gz", hash = "sha256:fbb17f57f7bd05a68b7707e745e26528b0b3c34e378db91eef93912c54982d91"},
+]
+
+[package.dependencies]
+protobuf = ">=3.19.0,<6.0.0dev"
+
+[package.extras]
+testing = ["google-api-core (>=1.31.5)"]
 
 [[package]]
 name = "protobuf"
