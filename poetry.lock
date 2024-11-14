@@ -247,13 +247,13 @@ requests = ["requests (>=2.20.0,<3.0.0.dev0)"]
 
 [[package]]
 name = "google-cloud-scheduler"
-version = "2.14.0"
+version = "2.14.1"
 description = "Google Cloud Scheduler API client library"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "google_cloud_scheduler-2.14.0-py2.py3-none-any.whl", hash = "sha256:308b955192530980660c44ca2e1b74ae61fbda08ca1ffb55c5f14b8b54f65629"},
-    {file = "google_cloud_scheduler-2.14.0.tar.gz", hash = "sha256:8ed3058f21d11a262fd8449cb8fcda06c4d62417046f524f0fd5ed260ed52e86"},
+    {file = "google_cloud_scheduler-2.14.1-py2.py3-none-any.whl", hash = "sha256:f357560f7a1570c759afb2626dfebd28c543ebcdf6e636dbc2217e4b823f266a"},
+    {file = "google_cloud_scheduler-2.14.1.tar.gz", hash = "sha256:6ecc51c04be3ddca18a47e21fff7691705780b1e42a85015b6b94317d196cd4b"},
 ]
 
 [package.dependencies]
@@ -478,23 +478,6 @@ files = [
     {file = "mypy_extensions-1.0.0-py3-none-any.whl", hash = "sha256:4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d"},
     {file = "mypy_extensions-1.0.0.tar.gz", hash = "sha256:75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782"},
 ]
-
-[[package]]
-name = "proto-plus"
-version = "1.23.0"
-description = "Beautiful, Pythonic protocol buffers."
-optional = false
-python-versions = ">=3.6"
-files = [
-    {file = "proto-plus-1.23.0.tar.gz", hash = "sha256:89075171ef11988b3fa157f5dbd8b9cf09d65fffee97e29ce403cd8defba19d2"},
-    {file = "proto_plus-1.23.0-py3-none-any.whl", hash = "sha256:a829c79e619e1cf632de091013a4173deed13a55f326ef84f05af6f50ff4c82c"},
-]
-
-[package.dependencies]
-protobuf = ">=3.19.0,<5.0.0dev"
-
-[package.extras]
-testing = ["google-api-core[grpc] (>=1.31.5)"]
 
 [[package]]
 name = "proto-plus"
