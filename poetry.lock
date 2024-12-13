@@ -267,13 +267,13 @@ protobuf = ">=3.20.2,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4
 
 [[package]]
 name = "google-cloud-tasks"
-version = "2.17.0"
+version = "2.18.0"
 description = "Google Cloud Tasks API client library"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "google_cloud_tasks-2.17.0-py2.py3-none-any.whl", hash = "sha256:a49dcad5360237aa7203f10d2814a8d0de26a8d555aa3624b5d35a1c575cce1d"},
-    {file = "google_cloud_tasks-2.17.0.tar.gz", hash = "sha256:e6d709b08af3b173b6c3fb80ff02b66e2d5954f92e94d5474d80b303847a38c1"},
+    {file = "google_cloud_tasks-2.18.0-py2.py3-none-any.whl", hash = "sha256:5d994ba60a136c942e322b76bc178e1089fbb9bc08ad58b5178e035cc26d2fe9"},
+    {file = "google_cloud_tasks-2.18.0.tar.gz", hash = "sha256:11a26b5b48733405cc4ea066b4f81ac353e5fb8566419b9b4d35d4bd1ceec58c"},
 ]
 
 [package.dependencies]
@@ -478,23 +478,6 @@ files = [
     {file = "mypy_extensions-1.0.0-py3-none-any.whl", hash = "sha256:4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d"},
     {file = "mypy_extensions-1.0.0.tar.gz", hash = "sha256:75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782"},
 ]
-
-[[package]]
-name = "proto-plus"
-version = "1.23.0"
-description = "Beautiful, Pythonic protocol buffers."
-optional = false
-python-versions = ">=3.6"
-files = [
-    {file = "proto-plus-1.23.0.tar.gz", hash = "sha256:89075171ef11988b3fa157f5dbd8b9cf09d65fffee97e29ce403cd8defba19d2"},
-    {file = "proto_plus-1.23.0-py3-none-any.whl", hash = "sha256:a829c79e619e1cf632de091013a4173deed13a55f326ef84f05af6f50ff4c82c"},
-]
-
-[package.dependencies]
-protobuf = ">=3.19.0,<5.0.0dev"
-
-[package.extras]
-testing = ["google-api-core[grpc] (>=1.31.5)"]
 
 [[package]]
 name = "proto-plus"
