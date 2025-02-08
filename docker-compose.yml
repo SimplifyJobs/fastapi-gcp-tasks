@@ -4,9 +4,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.emulator
-    command: /emulator -host 0.0.0.0 -port 8123 -grpc_port 8123
+    command: sh /app/start-emulator.sh
     ports:
       - "8123:8123"
+      - "8124:8124"
 
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8123/v1/projects/test-project/locations/us-central1/queues"]
@@ -23,8 +24,8 @@ services:
     working_dir: /app
     environment:
       - IS_LOCAL=true
-      - CLOUD_TASKS_EMULATOR_HOST=cloud-tasks-emulator:8123
-      - CLOUD_TASKS_EMULATOR_URL=cloud-tasks-emulator:8123
+      - CLOUD_TASKS_EMULATOR_HOST=cloud-tasks-emulator:8124
+      - CLOUD_TASKS_EMULATOR_URL=cloud-tasks-emulator:8124
       - TASK_LISTENER_BASE_URL=http://localhost:8000
       - TASK_PROJECT_ID=test-project
       - TASK_LOCATION=us-central1
