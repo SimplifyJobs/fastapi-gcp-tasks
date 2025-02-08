@@ -48,6 +48,12 @@ def emulator_client() -> tasks_v2.CloudTasksClient:
     """Helper function to create a CloudTasksClient from an emulator host."""
     host = os.getenv("CLOUD_TASKS_EMULATOR_HOST", "localhost")
     port = os.getenv("CLOUD_TASKS_EMULATOR_PORT", "8123")
-    channel = grpc.insecure_channel(f"{host}:{port}")
+    channel = grpc.insecure_channel(
+        f"{host}:{port}",
+        options=[
+            ('grpc.enable_http_proxy', 0),
+            ('grpc.enable_retries', 0),
+        ],
+    )
     transport = transports.CloudTasksGrpcTransport(channel=channel)
     return tasks_v2.CloudTasksClient(transport=transport)
