@@ -19,7 +19,7 @@ TASK_LOCATION = os.getenv("TASK_LOCATION", default="asia-south1")
 SCHEDULED_LOCATION = os.getenv("SCHEDULED_LOCATION", default="us-central1")
 TASK_QUEUE = os.getenv("TASK_QUEUE", default="test-queue")
 
-CLOUD_TASKS_EMULATOR_URL = os.getenv("CLOUD_TASKS_EMULATOR_URL", "localhost:8123")
+CLOUD_TASKS_EMULATOR_HOST = os.getenv("CLOUD_TASKS_EMULATOR_HOST", "localhost:8124")
 
 TASK_SERVICE_ACCOUNT = os.getenv(
     "TASK_SERVICE_ACCOUNT",

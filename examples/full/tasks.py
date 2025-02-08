@@ -36,7 +36,7 @@ logger = logging.getLogger("uvicorn")
 
 delayed_client = None
 if IS_LOCAL:
-    delayed_client = emulator_client(host=CLOUD_TASKS_EMULATOR_URL)
+    delayed_client = emulator_client()
 
 DelayedRoute = DelayedRouteBuilder(
     client=delayed_client,
