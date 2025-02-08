@@ -2,7 +2,7 @@
 set -e
 
 # Start emulator binding to all interfaces
-/emulator -host 0.0.0.0 -port 8123 -grpc_port 8123 -grpc_host 0.0.0.0 &
+/emulator -host 0.0.0.0 -port 8123 -grpc_port 8123 -grpc_host 0.0.0.0 -grpc_insecure &
 EMULATOR_PID=$!
 
 # Function to cleanup processes
