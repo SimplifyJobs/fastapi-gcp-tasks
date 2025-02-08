@@ -7,12 +7,11 @@ services:
     command: sh /app/start-emulator.sh
     ports:
       - "8123:8123"
-      - "8124:8124"
     volumes:
       - ./start-emulator.sh:/app/start-emulator.sh
 
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8123/v1/projects/test-project/locations/us-central1/queues"]
+      test: ["CMD", "wget", "-q", "--spider", "http://0.0.0.0:8123/v1/projects/test-project/locations/us-central1/queues"]
       interval: 1s
       timeout: 3s
       retries: 30
