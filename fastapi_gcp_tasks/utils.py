@@ -1,6 +1,8 @@
-# Third Party Imports
+# Standard Library Imports
+import os
 from typing import Any
 
+# Third Party Imports
 import grpc
 from google.api_core.exceptions import AlreadyExists
 from google.cloud import scheduler_v1, tasks_v2
@@ -42,8 +44,9 @@ def ensure_queue(
         pass
 
 
-def emulator_client(*, host: str = "localhost:8123") -> tasks_v2.CloudTasksClient:
+def emulator_client() -> tasks_v2.CloudTasksClient:
     """Helper function to create a CloudTasksClient from an emulator host."""
+    host = os.getenv("CLOUD_TASKS_EMULATOR_HOST", "localhost:8124")
     channel = grpc.insecure_channel(host)
     transport = transports.CloudTasksGrpcTransport(channel=channel)
     return tasks_v2.CloudTasksClient(transport=transport)
