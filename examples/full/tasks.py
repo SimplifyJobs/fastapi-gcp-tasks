@@ -9,7 +9,6 @@ from google.protobuf import duration_pb2
 # Imports from this repository
 from examples.full.serializer import Payload
 from examples.full.settings import (
-    CLOUD_TASKS_EMULATOR_HOST,
     IS_LOCAL,
     SCHEDULED_LOCATION_PATH,
     SCHEDULED_OIDC_TOKEN,
