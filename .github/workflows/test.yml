@@ -1,0 +1,57 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      cloud-tasks-emulator:
+        image: ghcr.io/aertje/cloud-tasks-emulator:latest
+        ports:
+          - 8123:8123
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: "1.8.2"
+    
+    - name: Install dependencies
+      run: |
+        poetry install --with test
+        poetry install --with dev
+    
+    - name: Run linting
+      run: poetry run sh scripts/lint.sh
+    
+    - name: Run type checking
+      run: poetry run mypy fastapi_gcp_tasks
+    
+    - name: Run tests
+      run: poetry run pytest --cov=fastapi_gcp_tasks --cov-report=xml
+      env:
+        IS_LOCAL: "true"
+        CLOUD_TASKS_EMULATOR_URL: http://localhost:8123
+        TASK_LISTENER_BASE_URL: http://localhost:8000
+        TASK_PROJECT_ID: test-project
+        TASK_LOCATION: us-central1
+        TASK_QUEUE: test-queue
+    
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: true
