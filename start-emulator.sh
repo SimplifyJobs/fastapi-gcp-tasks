@@ -6,7 +6,7 @@ socat TCP-LISTEN:8123,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:8124 &
 SOCAT_PID=$!
 
 # Start emulator on internal port with gRPC binding
-/emulator -port 8124 -grpc_port 8124 -grpc_host 0.0.0.0 &
+/emulator -host 0.0.0.0 -port 8124 -grpc_port 8124 -grpc_host 0.0.0.0 &
 EMULATOR_PID=$!
 
 # Function to cleanup processes
