@@ -111,7 +111,7 @@ def test_scheduled_route_cron_validation(app, test_client):
     ]
 
     for schedule in invalid_schedules:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Invalid cron expression"):
             test_task.scheduler(
                 name="test-invalid-cron",
                 schedule=schedule,
@@ -119,7 +119,7 @@ def test_scheduled_route_cron_validation(app, test_client):
             ).schedule(payload=TestPayload(message="test"))
 
     # Test invalid timezone
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Invalid timezone"):
         test_task.scheduler(
             name="test-invalid-timezone",
             schedule="0 * * * *",

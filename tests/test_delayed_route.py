@@ -126,7 +126,7 @@ def test_delayed_task_error_handling(app, test_client):
     3. Hook errors are properly propagated
     """
     # Test invalid base URL
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Invalid base URL"):
         DelayedRouteBuilder(
             base_url="invalid-url",
             queue_path=queue_path(
@@ -137,14 +137,14 @@ def test_delayed_task_error_handling(app, test_client):
         )
 
     # Test missing queue path
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Queue path must be provided"):
         DelayedRouteBuilder(
             base_url="http://localhost:8000",
             queue_path="",
         )
 
     # Test invalid client configuration
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Invalid client configuration"):
         DelayedRouteBuilder(
             base_url="http://localhost:8000",
             queue_path=queue_path(
