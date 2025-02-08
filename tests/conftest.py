@@ -31,7 +31,7 @@ def scheduled_route():
     """Create a ScheduledRouteBuilder configured for testing."""
     return ScheduledRouteBuilder(
         base_url="http://localhost:8000",
-        location_path=f"projects/test-project/locations/us-central1",
+        location_path="projects/test-project/locations/us-central1",
     )
 
 
