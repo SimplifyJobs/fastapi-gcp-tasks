@@ -47,12 +47,56 @@ poetry run pytest tests/test_delayed_route.py
 
 ## Test Structure
 
-The test suite is organized to cover:
-- DelayedRouteBuilder functionality
-- ScheduledRouteBuilder functionality
-- Task hooks (oidc, deadline, chained)
-- Dependencies (max_retries, CloudTasksHeaders)
-- Error cases and retries
+The test suite is organized into several key areas:
+
+### Core Functionality Tests
+- DelayedRouteBuilder
+  * Basic task creation and execution
+  * Queue auto-creation
+  * Task options (countdown, task_id)
+  * Error handling and validation
+
+- ScheduledRouteBuilder
+  * Basic job creation
+  * Cron schedule validation
+  * Time zone handling
+  * Job updates and uniqueness
+
+### Hook and Dependency Tests
+- Task Hooks
+  * OIDC token hooks
+  * Deadline hooks
+  * Chained hooks
+  * Custom hook creation
+- Dependencies
+  * max_retries functionality
+  * CloudTasksHeaders integration
+  * Error propagation
+
+### Example Implementation Tests
+- Simple Example
+  * Local mode functionality
+  * Task queueing
+  * Environment variable handling
+  * Default settings
+
+- Full Example
+  * Chained hook configuration
+  * Retry mechanisms
+  * Scheduled tasks
+  * Environment-specific behavior
+
+### Environment-Specific Tests
+- Local Development
+  * Emulator integration
+  * Default configurations
+  * Environment variable handling
+
+- Deployed Environment
+  * OIDC token integration
+  * Cloud Scheduler integration
+  * Job scheduling
+  * Production settings
 
 ## Contributing Tests
 

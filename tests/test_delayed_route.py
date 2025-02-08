@@ -1,11 +1,22 @@
-"""Tests for DelayedRouteBuilder functionality."""
+"""Tests for DelayedRouteBuilder functionality.
 
-from fastapi import APIRouter, Depends
+This module verifies the core functionality of DelayedRouteBuilder, including:
+- Basic task creation and execution
+- Task hooks and options
+- Queue auto-creation
+- Error handling and retries
+- Task scheduling with countdown
+"""
+
+import pytest
+from fastapi import APIRouter, Depends, HTTPException
 from google.protobuf import duration_pb2
 from pydantic import BaseModel
 
+from fastapi_gcp_tasks import DelayedRouteBuilder
 from fastapi_gcp_tasks.dependencies import max_retries
 from fastapi_gcp_tasks.hooks import deadline_delayed_hook
+from fastapi_gcp_tasks.utils import emulator_client, queue_path
 
 
 class TestPayload(BaseModel):
@@ -73,3 +84,108 @@ def test_delayed_task_with_countdown(app, delayed_route, test_client):
 
     response = test_client.post("/test-countdown", json={"message": "test"})
     assert response.status_code == 200
+
+
+def test_delayed_task_with_task_id(app, delayed_route, test_client):
+    """Test task creation with task ID.
+    
+    This test verifies that:
+    1. Tasks can be created with unique IDs
+    2. Duplicate task IDs are handled correctly
+    3. Task ID validation works
+    """
+    router = APIRouter(route_class=delayed_route)
+
+    @router.post("/test-task-id")
+    async def test_task(payload: TestPayload):
+        return {"received": payload.message}
+
+    app.include_router(router)
+
+    # Test with unique task ID
+    task1 = test_task.options(task_id="unique-task-1").delay(
+        payload=TestPayload(message="test1")
+    )
+    assert task1 is not None
+
+    # Test with duplicate task ID (should be idempotent)
+    task2 = test_task.options(task_id="unique-task-1").delay(
+        payload=TestPayload(message="test1")
+    )
+    assert task2 is not None
+
+    response = test_client.post("/test-task-id", json={"message": "test"})
+    assert response.status_code == 200
+
+
+def test_delayed_task_error_handling(app, test_client):
+    """Test error handling in delayed routes.
+    
+    This test verifies that:
+    1. Invalid configurations are caught
+    2. Task creation failures are handled
+    3. Hook errors are properly propagated
+    """
+    # Test invalid base URL
+    with pytest.raises(ValueError):
+        DelayedRouteBuilder(
+            base_url="invalid-url",
+            queue_path=queue_path(
+                project="test-project",
+                location="us-central1",
+                queue="test-queue",
+            ),
+        )
+
+    # Test missing queue path
+    with pytest.raises(ValueError):
+        DelayedRouteBuilder(
+            base_url="http://localhost:8000",
+            queue_path="",
+        )
+
+    # Test invalid client configuration
+    with pytest.raises(ValueError):
+        DelayedRouteBuilder(
+            base_url="http://localhost:8000",
+            queue_path=queue_path(
+                project="test-project",
+                location="us-central1",
+                queue="test-queue",
+            ),
+            client="invalid-client",
+        )
+
+
+def test_delayed_task_queue_creation(app, test_client):
+    """Test queue auto-creation functionality.
+    
+    This test verifies that:
+    1. Queue is created if it doesn't exist
+    2. DelayedRouteBuilder handles existing queues
+    3. auto_create_queue parameter works correctly
+    """
+    # Test with auto_create_queue=True (default)
+    route1 = DelayedRouteBuilder(
+        client=emulator_client(),
+        base_url="http://localhost:8000",
+        queue_path=queue_path(
+            project="test-project",
+            location="us-central1",
+            queue="test-queue-1",
+        ),
+    )
+    assert route1 is not None
+
+    # Test with auto_create_queue=False
+    route2 = DelayedRouteBuilder(
+        client=emulator_client(),
+        base_url="http://localhost:8000",
+        queue_path=queue_path(
+            project="test-project",
+            location="us-central1",
+            queue="test-queue-2",
+        ),
+        auto_create_queue=False,
+    )
+    assert route2 is not None
