@@ -31,7 +31,7 @@ def ensure_queue(
     """
     # We extract information from the queue path to make the public api simpler
     parsed_queue_path = client.parse_queue_path(path=path)
-    location_args = {k: v for k, v in parsed_queue_path.items() if k in ('project', 'location')}
+    location_args = {k: v for k, v in parsed_queue_path.items() if k in ("project", "location")}
     create_req = tasks_v2.CreateQueueRequest(
         parent=location_path(**location_args),
         queue=tasks_v2.Queue(name=path, **kwargs),
