@@ -4,11 +4,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.emulator
-    command: sh /app/start-emulator.sh
+    command: /emulator -host 0.0.0.0 -port 8123 -grpc_port 8123 -grpc_host 0.0.0.0 -grpc_insecure -grpc_bind_all -bind_all
     ports:
       - "8123:8123"
-    volumes:
-      - ./start-emulator.sh:/app/start-emulator.sh
 
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://0.0.0.0:8123/v1/projects/test-project/locations/us-central1/queues"]
