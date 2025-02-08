@@ -247,13 +247,13 @@ requests = ["requests (>=2.20.0,<3.0.0.dev0)"]
 
 [[package]]
 name = "google-cloud-scheduler"
-version = "2.14.0"
+version = "2.15.1"
 description = "Google Cloud Scheduler API client library"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "google_cloud_scheduler-2.14.0-py2.py3-none-any.whl", hash = "sha256:308b955192530980660c44ca2e1b74ae61fbda08ca1ffb55c5f14b8b54f65629"},
-    {file = "google_cloud_scheduler-2.14.0.tar.gz", hash = "sha256:8ed3058f21d11a262fd8449cb8fcda06c4d62417046f524f0fd5ed260ed52e86"},
+    {file = "google_cloud_scheduler-2.15.1-py2.py3-none-any.whl", hash = "sha256:a609fe65156594b6b162f26f41240c67f84aa13ba7db8149b4887db039db4962"},
+    {file = "google_cloud_scheduler-2.15.1.tar.gz", hash = "sha256:7c8e846cb7aca8934781c43e3568d39f909edf3fab5d0584e013b136ab8713a1"},
 ]
 
 [package.dependencies]
