@@ -1,2 +1,2 @@
 FROM ghcr.io/aertje/cloud-tasks-emulator:latest
-RUN apk add --no-cache wget
+RUN apk add --no-cache wget socat
