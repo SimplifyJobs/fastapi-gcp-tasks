@@ -1,4 +1,5 @@
-"""Tests for DelayedRouteBuilder functionality.
+"""
+Tests for DelayedRouteBuilder functionality.
 
 This module verifies the core functionality of DelayedRouteBuilder, including:
 - Basic task creation and execution
@@ -9,7 +10,7 @@ This module verifies the core functionality of DelayedRouteBuilder, including:
 """
 
 import pytest
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from google.protobuf import duration_pb2
 from pydantic import BaseModel
 
@@ -87,8 +88,9 @@ def test_delayed_task_with_countdown(app, delayed_route, test_client):
 
 
 def test_delayed_task_with_task_id(app, delayed_route, test_client):
-    """Test task creation with task ID.
-    
+    """
+    Test task creation with task ID.
+
     This test verifies that:
     1. Tasks can be created with unique IDs
     2. Duplicate task IDs are handled correctly
@@ -103,15 +105,11 @@ def test_delayed_task_with_task_id(app, delayed_route, test_client):
     app.include_router(router)
 
     # Test with unique task ID
-    task1 = test_task.options(task_id="unique-task-1").delay(
-        payload=TestPayload(message="test1")
-    )
+    task1 = test_task.options(task_id="unique-task-1").delay(payload=TestPayload(message="test1"))
     assert task1 is not None
 
     # Test with duplicate task ID (should be idempotent)
-    task2 = test_task.options(task_id="unique-task-1").delay(
-        payload=TestPayload(message="test1")
-    )
+    task2 = test_task.options(task_id="unique-task-1").delay(payload=TestPayload(message="test1"))
     assert task2 is not None
 
     response = test_client.post("/test-task-id", json={"message": "test"})
@@ -119,8 +117,9 @@ def test_delayed_task_with_task_id(app, delayed_route, test_client):
 
 
 def test_delayed_task_error_handling(app, test_client):
-    """Test error handling in delayed routes.
-    
+    """
+    Test error handling in delayed routes.
+
     This test verifies that:
     1. Invalid configurations are caught
     2. Task creation failures are handled
@@ -158,8 +157,9 @@ def test_delayed_task_error_handling(app, test_client):
 
 
 def test_delayed_task_queue_creation(app, test_client):
-    """Test queue auto-creation functionality.
-    
+    """
+    Test queue auto-creation functionality.
+
     This test verifies that:
     1. Queue is created if it doesn't exist
     2. DelayedRouteBuilder handles existing queues

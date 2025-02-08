@@ -1,4 +1,5 @@
-"""Tests for ScheduledRouteBuilder functionality.
+"""
+Tests for ScheduledRouteBuilder functionality.
 
 This module verifies the core functionality of ScheduledRouteBuilder, including:
 - Basic scheduled task creation
@@ -64,8 +65,9 @@ def test_scheduled_task_with_hook(app, scheduled_route, test_client):
 
 
 def test_scheduled_route_cron_validation(app, test_client):
-    """Test cron schedule validation.
-    
+    """
+    Test cron schedule validation.
+
     This test verifies that:
     1. Valid cron expressions are accepted
     2. Invalid expressions are rejected
@@ -126,8 +128,9 @@ def test_scheduled_route_cron_validation(app, test_client):
 
 
 def test_scheduled_route_job_creation(app, test_client):
-    """Test Cloud Scheduler job creation.
-    
+    """
+    Test Cloud Scheduler job creation.
+
     This test verifies that:
     1. Jobs are created with correct settings
     2. Job names are unique
