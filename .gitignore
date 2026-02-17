@@ -137,3 +137,7 @@ version.txt
 
 # JetBrains IDE
 .idea/
+
+# Claude Code
+.claude/settings.local.json
+.claude/plans/
