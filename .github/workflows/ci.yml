@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Start Cloud Tasks emulator
+        run: |
+          docker compose -f docker-compose.yaml up -d
+
+      - name: Run tests
+        run: make test
+
+      - name: Show emulator logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.yaml logs --no-color | cat
+
+      - name: Stop emulator
+        if: always()
+        run: |
+          docker compose -f docker-compose.yaml down -v

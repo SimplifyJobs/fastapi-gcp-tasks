@@ -53,7 +53,18 @@ DelayedRoute = DelayedRouteBuilder(
     ),
 )
 
+# No Cloud Scheduler emulator exists, so pass a dummy client when running locally
+# to avoid requiring GCP credentials. The client is never used in local mode
+# because the .schedule() call below is guarded by `if not IS_LOCAL`.
+scheduled_client = None
+if IS_LOCAL:
+    from google.auth.credentials import AnonymousCredentials
+    from google.cloud import scheduler_v1
+
+    scheduled_client = scheduler_v1.CloudSchedulerClient(credentials=AnonymousCredentials())
+
 ScheduledRoute = ScheduledRouteBuilder(
+    client=scheduled_client,
     base_url=TASK_LISTENER_BASE_URL,
     location_path=SCHEDULED_LOCATION_PATH,
     pre_create_hook=chained_hook(

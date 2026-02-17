@@ -182,7 +182,7 @@ DelayedRoute = DelayedRouteBuilder(
     base_url="http://localhost:8000"
     queue_path=queue_path(
         project="gcp-project-id",
-        location="asia-south1",
+        location="us-central1",
         queue="test-queue",
     ),
 )
@@ -367,9 +367,31 @@ async def my_task(ct_headers: CloudTasksHeaders = Depends()):
 
 Check the file [fastapi_cloud_tasks/dependencies.py](fastapi_gcp_tasks/dependencies.py) for details.
 
+## Development
+
+### Prerequisites
+
+- [uv](https://docs.astral.sh/uv/)
+- Docker (for the Cloud Tasks emulator)
+
+### Running tests
+
+```sh
+docker compose up -d       # start emulator
+make test                  # run tests
+docker compose down        # stop emulator
+```
+
+### Linting & formatting
+
+```sh
+make lint                  # check
+make format                # auto-fix
+```
+
 ## Contributing
 
-- Run the `format.sh` and `lint.sh` scripts before raising a PR.
+- Run `make lint` and `make format` before raising a PR.
 - Add examples and/or tests for new features.
 - If the change is massive, open an issue to discuss it before writing code.
 
