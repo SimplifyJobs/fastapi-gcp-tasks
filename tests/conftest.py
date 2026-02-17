@@ -107,5 +107,6 @@ def uvicorn_server(settings: Settings, base_url: str) -> Generator[subprocess.Po
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+            proc.wait()
         log.close()
         os.unlink(log.name)
