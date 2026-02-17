@@ -1,13 +1,10 @@
 .PHONY: lint format test
 
 lint:
-	uv run mypy fastapi_gcp_tasks
-	uv run ruff check fastapi_gcp_tasks tests scripts examples
-	uv run ruff format fastapi_gcp_tasks tests scripts examples --check
+	uv run scripts/lint.sh
 
 format:
-	uv run ruff check fastapi_gcp_tasks tests examples scripts --fix
-	uv run ruff format fastapi_gcp_tasks tests examples scripts
+	uv run scripts/format.sh
 
 test:
 	uv run pytest -q -x -s
