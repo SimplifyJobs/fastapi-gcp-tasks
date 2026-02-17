@@ -20,7 +20,7 @@ jobs:
       - name: Validate version
         run: |
           TAG_VERSION=${GITHUB_REF#refs/tags/v}
-          PYPROJECT_VERSION=$(uv version)
+          PYPROJECT_VERSION=$(uv version --short)
           echo "Tag version: $TAG_VERSION"
           echo "Pyproject version: $PYPROJECT_VERSION"
           if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
