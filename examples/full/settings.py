@@ -15,7 +15,7 @@ IS_LOCAL = os.getenv("IS_LOCAL", "true").lower() == "true"
 # Check main.py for how this is used.
 TASK_LISTENER_BASE_URL = os.getenv("TASK_LISTENER_BASE_URL", default="http://localhost:8000/_fastapi_cloud_tasks")
 TASK_PROJECT_ID = os.getenv("TASK_PROJECT_ID", default="sample-project")
-TASK_LOCATION = os.getenv("TASK_LOCATION", default="asia-south1")
+TASK_LOCATION = os.getenv("TASK_LOCATION", default="us-central1")
 SCHEDULED_LOCATION = os.getenv("SCHEDULED_LOCATION", default="us-central1")
 TASK_QUEUE = os.getenv("TASK_QUEUE", default="test-queue")
 

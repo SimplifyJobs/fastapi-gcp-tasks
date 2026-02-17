@@ -27,7 +27,7 @@ DelayedRoute = DelayedRouteBuilder(
     # Edit values below to match your project
     queue_path=queue_path(
         project=os.getenv("TASK_PROJECT_ID", default="gcp-project-id"),
-        location=os.getenv("TASK_LOCATION", default="asia-south1"),
+        location=os.getenv("TASK_LOCATION", default="us-central1"),
         queue=os.getenv("TASK_QUEUE", default="test-queue"),
     ),
 )

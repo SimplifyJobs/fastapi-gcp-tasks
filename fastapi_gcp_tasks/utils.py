@@ -32,7 +32,7 @@ def ensure_queue(
     # We extract information from the queue path to make the public api simpler
     parsed_queue_path = client.parse_queue_path(path=path)
     create_req = tasks_v2.CreateQueueRequest(
-        parent=location_path(**parsed_queue_path),
+        parent=location_path(project=parsed_queue_path["project"], location=parsed_queue_path["location"]),
         queue=tasks_v2.Queue(name=path, **kwargs),
     )
     try:
