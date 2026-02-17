@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11, <3.14"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -248,7 +248,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.110.0,<0.120.0" },
     { name = "google-cloud-scheduler", specifier = ">=2.13.3,<2.20.0" },
-    { name = "google-cloud-tasks", specifier = ">=2.16.3,<2.20.0" },
+    { name = "google-cloud-tasks", specifier = ">=2.21.0,<2.22.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -317,18 +317,19 @@ wheels = [
 
 [[package]]
 name = "google-cloud-tasks"
-version = "2.19.3"
+version = "2.21.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-api-core", extra = ["grpc"] },
     { name = "google-auth" },
     { name = "grpc-google-iam-v1" },
+    { name = "grpcio" },
     { name = "proto-plus" },
     { name = "protobuf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7c/73/47e178f576c1e2db9cdb389930ca26f1cf1313ca4d29cc3331ed09e3190d/google_cloud_tasks-2.19.3.tar.gz", hash = "sha256:e9da534f3793e0de37f9a3b34ac3647420865ca726c0ac72148c4f721c4894d6", size = 343833, upload-time = "2025-06-12T01:15:39.927Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b6/58/0238b71de170b92ef359e53047a3d6ff9618c04ee255cbc6def53ab79e11/google_cloud_tasks-2.21.0.tar.gz", hash = "sha256:d28f33248553faf0ff029e1981aab56cd13bd933635c3bc33aa187675e7e14d1", size = 351784, upload-time = "2026-01-15T13:04:43.071Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bf/8e/fe11607117508c24b56e04c77d0ea21b49ab469e180ff2b25f533dd9a85b/google_cloud_tasks-2.19.3-py3-none-any.whl", hash = "sha256:29bcf8cfa455db0bf5cb3e812e518de6a4e8ff748265898a3a15cfaf35927c7e", size = 289699, upload-time = "2025-06-12T01:15:38.388Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/9d/a7f098037fb56f1d69fbfad95f58bf322a4d0dbb6cafcf380c9535730cc0/google_cloud_tasks-2.21.0-py3-none-any.whl", hash = "sha256:4bf288876892a0afac30658fc42925ccb732d3c4433a8ea568de1d67fde738f2", size = 295211, upload-time = "2026-01-15T13:02:52.377Z" },
 ]
 
 [[package]]
