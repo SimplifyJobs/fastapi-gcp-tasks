@@ -13,7 +13,7 @@ google-cloud-scheduler = ">=2.13.3, <2.20.0"
 fastapi = ">=0.110.0, <0.120.0"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.14.0"
+ruff = "^0.15.0"
 uvicorn = "^0.41.0"
 mypy = "^1.10.0"
 types-ujson = "^5.10.0.20240515"
