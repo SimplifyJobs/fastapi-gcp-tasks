@@ -5,7 +5,7 @@ import os
 # Third Party Imports
 from fastapi import FastAPI
 from fastapi.routing import APIRouter
-from pydantic.v1 import BaseModel
+from pydantic import BaseModel
 
 # Imports from this repository
 from fastapi_gcp_tasks import DelayedRouteBuilder

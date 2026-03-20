@@ -1,19 +1,19 @@
-# Third Party Imports
-from pydantic.v1.errors import MissingError, PydanticValueError
-
-# TODO: Migrate to Pydantic v2.0 Errors
-
-
-class MissingParamError(MissingError):
+class MissingParamError(ValueError):
     """Error raised when a required parameter is missing."""
 
     msg_template = "field required: {param}"
 
+    def __init__(self, **ctx: object) -> None:
+        super().__init__(self.msg_template.format(**ctx))
 
-class WrongTypeError(PydanticValueError):
+
+class WrongTypeError(ValueError):
     """Error raised when a parameter is of the wrong type."""
 
     msg_template = "Expected {field} to be of type {type}"
+
+    def __init__(self, **ctx: object) -> None:
+        super().__init__(self.msg_template.format(**ctx))
 
 
 class BadMethodError(Exception):

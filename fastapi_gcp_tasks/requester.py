@@ -1,12 +1,11 @@
 # Standard Library Imports
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, get_origin
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 # Third Party Imports
 from fastapi.dependencies.utils import request_params_to_args
 from fastapi.encoders import jsonable_encoder
 from fastapi.routing import APIRoute
-from pydantic.v1.error_wrappers import ErrorWrapper
 
 # Imports from this repository
 from fastapi_gcp_tasks.exception import MissingParamError, WrongTypeError
@@ -86,20 +85,23 @@ class Requester:
         if body_field and body_field.name:
             got_body = values.get(body_field.name)
             if got_body is None:
-                if body_field.required:
-                    raise MissingParamError(name=body_field.name)
+                if body_field.field_info.is_required():
+                    raise MissingParamError(param=body_field.name)
                 got_body = body_field.get_default()
-            if not isinstance(got_body, body_field.type_):
-                raise WrongTypeError(field=body_field.name, type=body_field.type_)
+            body_type = body_field.field_info.annotation
+            check_type = get_origin(body_type) or body_type
+            if body_type is not None and isinstance(check_type, type) and not isinstance(got_body, check_type):
+                raise WrongTypeError(field=body_field.name, type=body_type)
             body = json.dumps(jsonable_encoder(got_body)).encode()
         return body
 
 
-def _err_val(resp: Tuple[Dict, List[ErrorWrapper]]) -> Dict:
+def _err_val(resp: Tuple[Dict[str, Any], List[Any]]) -> Dict[str, Any]:
     values, errors = resp
 
     if len(errors) != 0:
         # TODO: Log everything but raise first only
         # TODO: find a better way to raise and display these errors
-        raise errors[0].exc
+        err = errors[0]
+        raise ValueError(str(err))
     return values
