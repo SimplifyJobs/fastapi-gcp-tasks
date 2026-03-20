@@ -1,7 +1,7 @@
 """Unit tests for Requester._body covering missing-param and generic-type bugs."""
 
 # Standard Library Imports
-from typing import List
+from typing import List, Union
 
 # Third Party Imports
 import pytest
@@ -36,6 +36,11 @@ async def optional_body_endpoint(item: Item = Item(name="default")) -> None:
 @app.post("/list_body")
 async def list_body_endpoint(items: List[Item]) -> None:
     """Endpoint with a parameterized generic body."""
+
+
+@app.post("/union_body")
+async def union_body_endpoint(item: Union[Item, str] = "fallback") -> None:
+    """Endpoint with a Union-typed body."""
 
 
 def _get_route(path: str) -> APIRoute:
@@ -88,3 +93,10 @@ class TestGenericBodyType:
         requester = Requester(route=route, base_url="http://localhost")
         with pytest.raises(WrongTypeError):
             requester._body(values={"item": "not an Item"})
+
+    def test_union_body_does_not_crash(self) -> None:
+        """Union-typed body should not raise TypeError on isinstance check."""
+        route = _get_route("/union_body")
+        requester = Requester(route=route, base_url="http://localhost")
+        body = requester._body(values={"item": Item(name="test")})
+        assert body is not None

@@ -90,7 +90,7 @@ class Requester:
                 got_body = body_field.get_default()
             body_type = body_field.field_info.annotation
             check_type = get_origin(body_type) or body_type
-            if body_type is not None and check_type is not None and not isinstance(got_body, check_type):
+            if body_type is not None and isinstance(check_type, type) and not isinstance(got_body, check_type):
                 raise WrongTypeError(field=body_field.name, type=body_type)
             body = json.dumps(jsonable_encoder(got_body)).encode()
         return body
