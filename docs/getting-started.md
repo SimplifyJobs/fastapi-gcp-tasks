@@ -14,6 +14,7 @@ A delayed task is a plain FastAPI endpoint registered on a router whose `route_c
 `DelayedRouteBuilder`. That gives the endpoint a `.delay()` method:
 
 ```python
+import logging
 import os
 
 from fastapi import FastAPI
@@ -42,6 +43,8 @@ DelayedRoute = DelayedRouteBuilder(
 
 delayed_router = APIRouter(route_class=DelayedRoute, prefix="/delayed")
 
+logger = logging.getLogger("uvicorn")
+
 
 class Payload(BaseModel):
     message: str
@@ -50,14 +53,16 @@ class Payload(BaseModel):
 @delayed_router.post("/hello")
 @as_delayed_task  # optional: makes .delay statically visible to type checkers
 async def hello(p: Payload = Payload(message="Default")) -> None:
-    print(f"Hello task ran with payload: {p.message}")
+    logger.warning(f"Hello task ran with payload: {p.message}")
 
 
 app = FastAPI()
 
 
+# A plain `def` endpoint: the sync `.delay()` makes a blocking gRPC call, so let
+# FastAPI run it in the threadpool (or see the Async usage guide for `await .delay()`).
 @app.get("/trigger")
-async def trigger() -> dict[str, str]:
+def trigger() -> dict[str, str]:
     hello.delay(p=Payload(message="Triggered task"))
     return {"message": "Hello task triggered"}
 
@@ -77,11 +82,14 @@ Start the emulator in one terminal:
 cloud-tasks-emulator
 ```
 
-Start the app on port 8000 so Cloud Tasks can reach it:
+Save the snippet as `main.py` and start it on port 8000 so Cloud Tasks can reach it:
 
 ```sh
-uvicorn examples.simple.main:app --reload --port 8000
+uvicorn main:app --reload --port 8000
 ```
+
+(If you cloned the repository instead, the checked-in example runs with
+`uvicorn examples.simple.main:app --reload --port 8000`.)
 
 Trigger the task from another terminal:
 

@@ -6,11 +6,19 @@ on:
   pull_request:
     branches: [ master ]
 
+# Build runs on PR-controlled code, so it only gets read access; the deploy
+# job below is the only one with write scope and only runs on master pushes.
 permissions:
-  contents: write
+  contents: read
+
+# Serialize per ref so a slow run from an older master push can't finish
+# after a newer one and force-push stale site content.
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  docs:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -30,12 +38,31 @@ jobs:
       - name: Build docs
         run: uv run --group docs mkdocs build --strict
 
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: uv sync --group docs
+
       - name: Configure git credentials
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Deploy to GitHub Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: uv run --group docs mkdocs gh-deploy --force
