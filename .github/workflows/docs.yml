@@ -28,8 +28,14 @@ jobs:
         run: uv sync --group docs
 
       - name: Build docs
-        run: uv run mkdocs build --strict
+        run: uv run --group docs mkdocs build --strict
+
+      - name: Configure git credentials
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Deploy to GitHub Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: uv run mkdocs gh-deploy --force
+        run: uv run --group docs mkdocs gh-deploy --force

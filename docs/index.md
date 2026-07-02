@@ -13,7 +13,7 @@ beat, with no RabbitMQ or Redis broker to run.
 
 Your tasks are regular FastAPI endpoints. Trigger one later with `.delay()`, or on a cron schedule with
 `.scheduler()` — GCP's Cloud Tasks queue and Cloud Scheduler make the HTTP calls back to your service, with
-retries, deduplication, and rate control handled by the queue.
+retries and rate control handled by the queue (and opt-in deduplication by passing a stable `task_id`).
 
 ```mermaid
 sequenceDiagram
