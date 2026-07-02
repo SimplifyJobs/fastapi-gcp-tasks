@@ -258,7 +258,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.110.0,<0.137.0" },
-    { name = "google-cloud-scheduler", specifier = ">=2.13.3,<2.20.0" },
+    { name = "google-cloud-scheduler", specifier = ">=2.13.3,<2.21.0" },
     { name = "google-cloud-tasks", specifier = ">=2.21.0,<2.24.0" },
 ]
 
@@ -312,7 +312,7 @@ wheels = [
 
 [[package]]
 name = "google-cloud-scheduler"
-version = "2.18.0"
+version = "2.20.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-api-core", extra = ["grpc"] },
@@ -321,9 +321,9 @@ dependencies = [
     { name = "proto-plus" },
     { name = "protobuf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9e/b8/93133334e6508bc7a71beaa53524f849c29ea6b1f9c0364ada113801f5e0/google_cloud_scheduler-2.18.0.tar.gz", hash = "sha256:c8869e234d46a7698b4bf83fba7c3ff058682fc1541bf9a1e5e8e2b9758f040c", size = 150909, upload-time = "2026-01-15T13:04:44.505Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/11/d2/b38c2b901cf758115861828ee31a08e85ec615ea1f22fda440d6f4cb83ef/google_cloud_scheduler-2.20.0.tar.gz", hash = "sha256:17fee4b894e588587f76518185f20b6f7ddbce04ca91bbbb325ea995222d2b87", size = 151676, upload-time = "2026-06-03T16:13:42.024Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5f/45/59b115ce47bc972edcb222ce7783e1e2301dac0d2afc49842b1be83b2115/google_cloud_scheduler-2.18.0-py3-none-any.whl", hash = "sha256:0818a47bd7709c4b39584ad0cfc246352778770fad70cb5ea5b54c8f0b29da99", size = 137647, upload-time = "2026-01-15T12:17:12.768Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/4f/3fb7f4449be1f6c51b07c7c1cdb137c05a0ae329d8db38f621b99a7f105b/google_cloud_scheduler-2.20.0-py3-none-any.whl", hash = "sha256:7e227cb2438c168ca214dc852eaa96f7066a8f206faec3a88c810a25fb5da6d8", size = 138294, upload-time = "2026-06-03T16:12:18.746Z" },
 ]
 
 [[package]]
