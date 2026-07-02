@@ -1,18 +1,27 @@
 # Standard Library Imports
 from collections.abc import Callable
-from typing import Any, TypeVar, Unpack
+from typing import Any, TypeVar, Unpack, overload
 
 # Imports from this repository
-from fastapi_gcp_tasks.protocols import DelayOptions, TaskDefaultOptions, ensure_known_options
+from fastapi_gcp_tasks.protocols import AsyncDelayOptions, DelayOptions, ensure_known_options
 
 F = TypeVar("F", bound=Callable[..., Any])
 
+# Overloaded so that `client` stays statically usable with either builder:
+# a CloudTasksClient matches the DelayOptions overload, a CloudTasksAsyncClient
+# (or factory) matches the AsyncDelayOptions one. All other keys are shared.
 
-def task_default_options(**options: Unpack[TaskDefaultOptions]) -> Callable[[F], F]:
+
+@overload
+def task_default_options(**options: Unpack[DelayOptions]) -> Callable[[F], F]: ...
+
+
+@overload
+def task_default_options(**options: Unpack[AsyncDelayOptions]) -> Callable[[F], F]: ...
+
+
+def task_default_options(**options: Any) -> Callable[[F], F]:
     """Wrapper to set default options for a cloud task."""
-    # Runtime-validate against the superset (DelayOptions adds `client`): the
-    # static type excludes `client` only because its type differs between the
-    # sync and async builders, but the runtime supports it for both.
     ensure_known_options(options, DelayOptions)
 
     def wrapper(fn: F) -> F:
