@@ -2,6 +2,8 @@
 
 Strongly typed background tasks with FastAPI and Google Cloud Run, Tasks and Scheduler. This is a fork of [fastapi-gcp-tasks](https://github.com/adori/fastapi-cloud-tasks), updated with new features and bug fixes.
 
+**📚 Documentation: [simplifyjobs.github.io/fastapi-gcp-tasks](https://simplifyjobs.github.io/fastapi-gcp-tasks/)**
+
 ```mermaid
 sequenceDiagram
     autonumber

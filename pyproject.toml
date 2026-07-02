@@ -25,6 +25,10 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "types-requests>=2.33.0.20260518",
 ]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
