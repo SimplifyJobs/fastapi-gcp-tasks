@@ -182,3 +182,26 @@ def test_job_changed_ignores_user_agent_on_both_sides() -> None:
     # A real difference is still detected.
     existing_diff = make_job({"X-Custom": "2"})
     assert BaseScheduler._job_changed(job=existing_diff, request=request) is True
+
+
+def test_sync_route_rejects_async_client() -> None:
+    """An async client sneaking into a sync builder must fail fast, not return unawaited coroutines."""
+    client = MagicMock(spec=tasks_v2.CloudTasksClient)
+    route_class = DelayedRouteBuilder(
+        base_url=BASE_URL,
+        queue_path=QUEUE_PATH,
+        client=client,
+    )
+    app = FastAPI()
+    router = APIRouter(route_class=route_class)
+
+    @router.post("/task")
+    @task_default_options(client=MagicMock(spec=tasks_v2.CloudTasksAsyncClient))
+    @as_delayed_task
+    def my_task() -> None:
+        """Task endpoint."""
+
+    app.include_router(router)
+
+    with pytest.raises(TypeError, match="requires a CloudTasksClient"):
+        my_task.options()
