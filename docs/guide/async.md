@@ -10,16 +10,16 @@ from fastapi_gcp_tasks import AsyncDelayedRouteBuilder, as_async_delayed_task
 async_delayed_router = APIRouter(route_class=AsyncDelayedRouteBuilder(...))
 
 
-@async_delayed_router.post("/{restaurant}/make_dinner")
+@async_delayed_router.post("/{branch}/make_chili")
 @as_async_delayed_task
-async def make_dinner(restaurant: str, recipe: Recipe) -> None: ...
+async def make_chili(branch: str, recipe: Recipe) -> None: ...
 
 
 app.include_router(async_delayed_router)
 
 # In an async context (endpoint, lifespan, etc):
-await make_dinner.delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav", "Bhaji"]))
-await make_dinner.options(countdown=1800).delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav", "Bhaji"]))
+await make_chili.delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))
+await make_chili.options(countdown=1800).delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))
 ```
 
 Similarly, `AsyncScheduledRouteBuilder` provides awaitable `.schedule()` and `.delete()` — useful when
@@ -34,18 +34,18 @@ from fastapi_gcp_tasks import AsyncScheduledRouteBuilder, as_async_scheduled_tas
 async_scheduled_router = APIRouter(route_class=AsyncScheduledRouteBuilder(...))
 
 
-@async_scheduled_router.post("/home_cook")
+@async_scheduled_router.post("/pretzel_day")
 @as_async_scheduled_task
-async def home_cook(recipe: Recipe) -> None: ...
+async def pretzel_day(recipe: Recipe) -> None: ...
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await home_cook.scheduler(
-        name="home-cook-7AM-IST",
-        schedule="0 7 * * *",
-        time_zone="Asia/Kolkata",
-    ).schedule(recipe=Recipe(ingredients=["Milk", "Cereal"]))
+    await pretzel_day.scheduler(
+        name="pretzel-day-9AM-scranton",
+        schedule="0 9 * * 5",
+        time_zone="America/New_York",
+    ).schedule(recipe=Recipe(ingredients=["Sweet glaze", "Cinnamon sugar"]))
     yield
 ```
 

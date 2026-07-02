@@ -25,15 +25,15 @@ Add one of the `as_*_task` decorators as the **innermost** decorator. They are i
 from fastapi_gcp_tasks import as_delayed_task
 
 
-@delayed_router.post("/{restaurant}/make_dinner")
+@delayed_router.post("/{branch}/make_chili")
 @as_delayed_task
-async def make_dinner(restaurant: str, recipe: Recipe) -> None: ...
+async def make_chili(branch: str, recipe: Recipe) -> None: ...
 
 
-make_dinner.delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav", "Bhaji"]))  # statically checked
-make_dinner.delay(restaurant="Taj", recipe="oops")  # type error: wrong type for "recipe"
-make_dinner.delay(restaurant="Taj")                 # type error: missing "recipe"
-make_dinner.options(countdown=1800).delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav", "Bhaji"]))
+make_chili.delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))  # statically checked
+make_chili.delay(branch="Scranton", recipe="oops")  # type error: wrong type for "recipe"
+make_chili.delay(branch="Scranton")                 # type error: missing "recipe"
+make_chili.options(countdown=1800).delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))
 ```
 
 Each route builder has a matching decorator:
@@ -52,8 +52,8 @@ Options accepted by `.options()`, `.scheduler()`, and `task_default_options` are
 misspelled or wrongly-typed options are caught statically too:
 
 ```python
-make_dinner.options(countdown="soon")  # type error: countdown expects int
-make_dinner.options(countdwn=60)       # type error: unknown option
+make_chili.options(countdown="soon")  # type error: countdown expects int
+make_chili.options(countdwn=60)       # type error: unknown option
 ```
 
 ## Caveats

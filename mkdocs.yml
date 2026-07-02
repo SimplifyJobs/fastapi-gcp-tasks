@@ -1,5 +1,7 @@
 site_name: FastAPI GCP Tasks
-site_description: Strongly typed background tasks with FastAPI and Google Cloud Run, Tasks and Scheduler.
+site_description: >-
+  Strongly typed background tasks and cron jobs for FastAPI on Google Cloud (GCP) —
+  a serverless celery alternative built on Cloud Tasks, Cloud Scheduler, and Cloud Run.
 site_url: https://simplifyjobs.github.io/fastapi-gcp-tasks/
 repo_url: https://github.com/SimplifyJobs/fastapi-gcp-tasks
 repo_name: SimplifyJobs/fastapi-gcp-tasks

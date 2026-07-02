@@ -15,10 +15,10 @@ class Recipe(BaseModel):
     ingredients: list[str]
 
 
-@delayed_router.post("/{restaurant}/make_dinner")
+@delayed_router.post("/{branch}/make_chili")
 @as_delayed_task
-async def make_dinner(restaurant: str, recipe: Recipe) -> None:
-    # Do a ton of work here.
+async def make_chili(branch: str, recipe: Recipe) -> None:
+    # Do a ton of work here. The secret is to undercook the onions.
     ...
 
 
@@ -31,7 +31,7 @@ Pydantic bodies, `Depends`, middlewares, and telemetry.
 ## Triggering
 
 ```python
-make_dinner.delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav", "Bhaji"]))
+make_chili.delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))
 ```
 
 `.delay()` takes the same (keyword) arguments as the endpoint, validates them, builds the full task URL, and
@@ -41,7 +41,7 @@ HTTP status matters (2xx acknowledges the task; anything else retries it).
 To trigger 30 minutes later:
 
 ```python
-make_dinner.options(countdown=1800).delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav", "Bhaji"]))
+make_chili.options(countdown=1800).delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))
 ```
 
 ## Per-endpoint defaults
@@ -63,7 +63,7 @@ def simple_task() -> None: ...
 Pass a `task_id` to make Cloud Tasks queue a given task at most once:
 
 ```python
-make_dinner.options(task_id=f"dinner-{order_id}").delay(...)
+make_chili.options(task_id=f"chili-{party_id}").delay(...)
 ```
 
 !!! note

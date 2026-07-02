@@ -1,9 +1,19 @@
-# FastAPI GCP Tasks
+---
+description: >-
+  Strongly typed background tasks and cron jobs for FastAPI on Google Cloud —
+  a serverless celery alternative built on GCP Cloud Tasks, Cloud Scheduler,
+  and Cloud Run.
+---
 
-Strongly typed background tasks with FastAPI and Google Cloud Run, Tasks and Scheduler.
+# FastAPI GCP Tasks — background tasks on Google Cloud
+
+**Strongly typed background tasks and scheduled (cron) jobs for FastAPI**, built on **Google Cloud Tasks**,
+**Cloud Scheduler**, and **Cloud Run** — a serverless, autoscaling alternative to celery workers and celery
+beat, with no RabbitMQ or Redis broker to run.
 
 Your tasks are regular FastAPI endpoints. Trigger one later with `.delay()`, or on a cron schedule with
-`.scheduler()` — Cloud Tasks and Cloud Scheduler make the HTTP calls back to your service.
+`.scheduler()` — GCP's Cloud Tasks queue and Cloud Scheduler make the HTTP calls back to your service, with
+retries, deduplication, and rate control handled by the queue.
 
 ```mermaid
 sequenceDiagram
@@ -56,21 +66,22 @@ sequenceDiagram
     - With a FaaS setup, your task workers can autoscale based on load.
     - Most FaaS services have free tiers, making it much cheaper than running a celery worker.
 
-## The concept
+## A celery alternative on GCP
 
-[Cloud Tasks](https://cloud.google.com/tasks) allows us to schedule an HTTP request in the future.
+[Cloud Tasks](https://cloud.google.com/tasks) allows us to schedule an HTTP request in the future — a fully
+managed task queue on Google Cloud.
 
 [FastAPI](https://fastapi.tiangolo.com/tutorial/body/) makes us define a complete schema and params for an
 HTTP endpoint.
 
 [Cloud Scheduler](https://cloud.google.com/scheduler) allows us to schedule recurring HTTP requests in the
-future.
+future — managed cron jobs on Google Cloud.
 
 FastAPI GCP Tasks works by putting the three together:
 
-- Cloud Tasks + FastAPI = partial replacement for celery's async delayed tasks.
-- Cloud Scheduler + FastAPI = replacement for celery beat.
-- FastAPI GCP Tasks + Cloud Run = autoscaled delayed tasks.
+- **GCP Cloud Tasks + FastAPI** = replacement for celery's async delayed tasks and task queue.
+- **GCP Cloud Scheduler + FastAPI** = replacement for celery beat (periodic tasks / cron jobs).
+- **FastAPI GCP Tasks + Cloud Run** = serverless, autoscaled background workers that scale to zero.
 
 ## Where to go next
 

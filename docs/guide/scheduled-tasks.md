@@ -15,21 +15,21 @@ class Recipe(BaseModel):
     ingredients: list[str]
 
 
-@scheduled_router.post("/home_cook")
+@scheduled_router.post("/pretzel_day")
 @as_scheduled_task
-async def home_cook(recipe: Recipe) -> None:
-    # Make my own food
+async def pretzel_day(recipe: Recipe) -> None:
+    # Everyone gets one free soft pretzel
     ...
 
 
 app.include_router(scheduled_router)
 
-# Make my own breakfast every morning at 7AM IST.
-home_cook.scheduler(
-    name="test-home-cook-at-7AM-IST",
-    schedule="0 7 * * *",
-    time_zone="Asia/Kolkata",
-).schedule(recipe=Recipe(ingredients=["Milk", "Cereal"]))
+# Every Friday at 9AM in Scranton, it's Pretzel Day.
+pretzel_day.scheduler(
+    name="pretzel-day-9AM-scranton",
+    schedule="0 9 * * 5",
+    time_zone="America/New_York",
+).schedule(recipe=Recipe(ingredients=["Sweet glaze", "Cinnamon sugar"]))
 ```
 
 `.scheduler(...)` configures the job (name, cron schedule, time zone, retry config); `.schedule(...)` takes
@@ -44,7 +44,7 @@ instances. Pass `force=True` to always recreate.
 ## Deleting a job
 
 ```python
-home_cook.scheduler(name="test-home-cook-at-7AM-IST", schedule="0 7 * * *").delete()
+pretzel_day.scheduler(name="pretzel-day-9AM-scranton", schedule="0 9 * * 5").delete()
 ```
 
 See [Configuration](configuration.md#scheduledroutebuilder) for all options, and
