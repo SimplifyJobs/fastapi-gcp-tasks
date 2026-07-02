@@ -144,7 +144,7 @@ def test_unknown_options_raise_type_error() -> None:
         my_task.options(countdwn=5)  # type: ignore[call-arg]
 
     with pytest.raises(TypeError, match="countdwn"):
-        task_default_options(countdwn=5)  # type: ignore[call-arg]
+        task_default_options(countdwn=5)  # type: ignore[call-overload]
 
 
 def test_task_default_options_accepts_builder_overrides() -> None:
