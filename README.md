@@ -41,6 +41,7 @@ pip install fastapi-gcp-tasks
 - Familiar and simple public API
   - `.delay` method that takes same arguments as the task.
   - `.scheduler` method to create recurring job.
+  - Async variants (`AsyncDelayedRouteBuilder` / `AsyncScheduledRouteBuilder`) so `await .delay()` never blocks the event loop.
 - Tasks are regular FastAPI endpoints on plain old HTTP.
   - `Depends` just works!
   - All middlewares, telemetry, auth, debugging etc solutions for FastAPI work as is.
@@ -116,6 +117,82 @@ app.include_router(scheduled_router)
 home_cook.scheduler(name="test-home-cook-at-7AM-IST", schedule="0 7 * * *", time_zone="Asia/Kolkata").schedule(
   recipe=Recipe(ingredients=["Milk", "Cereal"]))
 ```
+
+### Async usage
+
+`DelayedRouteBuilder`'s `.delay()` makes a blocking gRPC call. Called from an async endpoint, it stalls the
+event loop until Cloud Tasks responds. `AsyncDelayedRouteBuilder` uses the native
+`CloudTasksAsyncClient` instead, so triggering a task is a proper coroutine:
+
+```python
+from fastapi_gcp_tasks import AsyncDelayedRouteBuilder
+
+async_delayed_router = APIRouter(route_class=AsyncDelayedRouteBuilder(...))
+
+
+@async_delayed_router.post("/{restaurant}/make_dinner")
+async def make_dinner(restaurant: str, recipe: Recipe):
+    ...
+
+
+app.include_router(async_delayed_router)
+
+# In an async context (endpoint, lifespan, etc):
+await make_dinner.delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav", "Bhaji"]))
+await make_dinner.options(countdown=1800).delay(...)
+```
+
+Similarly, `AsyncScheduledRouteBuilder` provides awaitable `.schedule()` and `.delete()` — useful when
+creating Cloud Scheduler jobs dynamically from request handlers. Since it can't run at module import
+time like the sync version, await it from a lifespan (or a handler):
+
+```python
+from contextlib import asynccontextmanager
+
+from fastapi_gcp_tasks import AsyncScheduledRouteBuilder
+
+async_scheduled_router = APIRouter(route_class=AsyncScheduledRouteBuilder(...))
+
+
+@async_scheduled_router.post("/home_cook")
+async def home_cook(recipe: Recipe):
+    ...
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await home_cook.scheduler(name="home-cook-7AM-IST", schedule="0 7 * * *", time_zone="Asia/Kolkata").schedule(
+        recipe=Recipe(ingredients=["Milk", "Cereal"])
+    )
+    yield
+```
+
+Things to know about the async builders:
+
+- **The client is created lazily.** grpc.aio clients bind to the event loop that is running when they are
+  constructed, so the builder resolves its client on the first awaited call, inside your app's loop. `client`
+  accepts a client instance, a zero-argument factory returning one, or `None` (default credentials). If your
+  client needs custom construction — like the local emulator — pass a factory:
+  `client=lambda: async_emulator_client()`.
+- **The queue is not auto-created by default.** Unlike `DelayedRouteBuilder`, `auto_create_queue` defaults to
+  `False` so no unexpected RPC runs inside a request handler. Either ensure the queue from your lifespan with
+  the `ensure_queue_async` util (recommended), or opt in with `auto_create_queue=True` to ensure it lazily on
+  the first `.delay()`:
+
+  ```python
+  from contextlib import asynccontextmanager
+
+  from fastapi_gcp_tasks.utils import ensure_queue_async
+
+
+  @asynccontextmanager
+  async def lifespan(app: FastAPI):
+      await ensure_queue_async(client=my_async_client, path=MY_QUEUE_PATH)
+      yield
+  ```
+
+- **Hooks are unchanged.** The same (synchronous) `pre_create_hook`s work with both builders — they are pure
+  in-memory mutations of the request proto and run inline on the event loop, so they must not block.
 
 ## Concept
 
@@ -320,6 +397,15 @@ Example:
 simple_task.options(countdown=120).delay()
 ```
 
+### AsyncDelayedRouteBuilder
+
+Same options as `DelayedRouteBuilder`, with two differences:
+
+- `client` - A `CloudTasksAsyncClient`, a zero-argument factory returning one, or `None`. Resolved lazily on
+  the first awaited `.delay()` because grpc.aio clients bind to the running event loop.
+- `auto_create_queue` - Defaults to `False` (the sync builder defaults to `True`). When `True`, the queue is
+  ensured lazily on the first `.delay()`. Prefer calling `ensure_queue_async` from your lifespan instead.
+
 ### ScheduledRouteBuilder
 
 Usage:
@@ -335,6 +421,12 @@ def simple_scheduled_task():
 
 simple_scheduled_task.scheduler(name="simple_scheduled_task", schedule="* * * * *").schedule()
 ```
+
+### AsyncScheduledRouteBuilder
+
+Same options as `ScheduledRouteBuilder`, except `client` accepts a `CloudSchedulerAsyncClient`, a
+zero-argument factory returning one, or `None` (resolved lazily, as above). `.schedule()` and `.delete()`
+are coroutines — await them from a lifespan or a request handler.
 
 
 ## Hooks

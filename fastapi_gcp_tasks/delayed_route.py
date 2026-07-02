@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Callable, Type
+from typing import Any, Callable, Type
 
 # Third Party Imports
 from fastapi.routing import APIRoute
@@ -61,7 +61,7 @@ def DelayedRouteBuilder(  # noqa: N802
             self.endpoint.delay = self.delay  # type: ignore[attr-defined]
             return original_route_handler
 
-        def delay_options(self, **options: dict) -> Delayer:
+        def delay_options(self, **options: Any) -> Delayer:
             delay_opts = {
                 "base_url": base_url,
                 "queue_path": queue_path,
@@ -79,7 +79,7 @@ def DelayedRouteBuilder(  # noqa: N802
                 **delay_opts,  # type: ignore[arg-type]
             )
 
-        def delay(self, **kwargs: dict) -> tasks_v2.Task:
+        def delay(self, **kwargs: Any) -> tasks_v2.Task:
             return self.delay_options().delay(**kwargs)
 
     return TaskRouteMixin

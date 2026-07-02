@@ -17,7 +17,7 @@ from examples.full.settings import (
     TASK_OIDC_TOKEN,
     TASK_QUEUE_PATH,
 )
-from fastapi_gcp_tasks import DelayedRouteBuilder
+from fastapi_gcp_tasks import AsyncDelayedRouteBuilder, DelayedRouteBuilder
 from fastapi_gcp_tasks.dependencies import max_retries
 from fastapi_gcp_tasks.hooks import (
     chained_hook,
@@ -27,7 +27,7 @@ from fastapi_gcp_tasks.hooks import (
     oidc_scheduled_hook,
 )
 from fastapi_gcp_tasks.scheduled_route import ScheduledRouteBuilder
-from fastapi_gcp_tasks.utils import emulator_client
+from fastapi_gcp_tasks.utils import async_emulator_client, emulator_client
 
 app = FastAPI()
 
@@ -77,6 +77,28 @@ ScheduledRoute = ScheduledRouteBuilder(
     ),
 )
 
+
+# The async client binds to the running event loop, so pass a factory that is
+# resolved lazily on the first awaited .delay() instead of a client instance.
+def _local_async_delayed_client():
+    return async_emulator_client(host=CLOUD_TASKS_EMULATOR_URL)
+
+
+AsyncDelayedRoute = AsyncDelayedRouteBuilder(
+    client=_local_async_delayed_client if IS_LOCAL else None,
+    base_url=TASK_LISTENER_BASE_URL,
+    queue_path=TASK_QUEUE_PATH,
+    auto_create_queue=True,
+    pre_create_hook=chained_hook(
+        # Add service account for cloud run
+        oidc_delayed_hook(
+            token=TASK_OIDC_TOKEN,
+        ),
+        # Wait for half an hour
+        deadline_delayed_hook(duration=duration_pb2.Duration(seconds=1800)),
+    ),
+)
+
 delayed_router = APIRouter(route_class=DelayedRoute, prefix="/delayed")
 
 
@@ -89,6 +111,15 @@ async def hello(p: Payload = Payload(message="Default")):
 @delayed_router.post("/fail_twice", dependencies=[Depends(max_retries(2))])
 async def fail_twice():
     raise Exception("nooo")
+
+
+async_delayed_router = APIRouter(route_class=AsyncDelayedRoute, prefix="/async_delayed")
+
+
+@async_delayed_router.post("/hello")
+async def hello_async(p: Payload = Payload(message="Default")):
+    message = f"Async hello task ran with payload: {p.message}"
+    logger.warning(message)
 
 
 scheduled_router = APIRouter(route_class=ScheduledRoute, prefix="/scheduled")
@@ -110,4 +141,5 @@ if not IS_LOCAL:
     ).schedule(p=Payload(message="Scheduled"))
 
 app.include_router(delayed_router)
+app.include_router(async_delayed_router)
 app.include_router(scheduled_router)
