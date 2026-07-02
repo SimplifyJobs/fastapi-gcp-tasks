@@ -132,7 +132,7 @@ class Scheduler(Requester):
             return ex
 
 
-def _scheduler_method(methods: Iterable[str]) -> scheduler_v1.HttpMethod:
+def _scheduler_method(methods: Iterable[str] | None) -> scheduler_v1.HttpMethod:
     method_map = {
         "POST": scheduler_v1.HttpMethod.POST,
         "GET": scheduler_v1.HttpMethod.GET,
@@ -142,8 +142,10 @@ def _scheduler_method(methods: Iterable[str]) -> scheduler_v1.HttpMethod:
         "PATCH": scheduler_v1.HttpMethod.PATCH,
         "OPTIONS": scheduler_v1.HttpMethod.OPTIONS,
     }
-    methods = list(methods)
+    methods = list(methods or [])
     # Only crash if we're being bound
+    if not methods:
+        raise BadMethodError("Can't schedule task without a method")
     if len(methods) > 1:
         raise BadMethodError("Can't schedule task with multiple methods")
     method = method_map.get(methods[0])
