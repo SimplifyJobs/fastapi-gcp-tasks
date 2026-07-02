@@ -11,7 +11,7 @@ from google.cloud import scheduler_v1
 from fastapi_gcp_tasks.async_clients import AsyncClientProvider
 from fastapi_gcp_tasks.async_scheduler import AsyncCloudSchedulerClientFactory, AsyncScheduler
 from fastapi_gcp_tasks.hooks import ScheduledHook, noop_hook
-from fastapi_gcp_tasks.protocols import AsyncSchedulerOptions
+from fastapi_gcp_tasks.protocols import AsyncSchedulerOptions, ensure_known_options
 
 
 def AsyncScheduledRouteBuilder(  # noqa: N802
@@ -67,6 +67,7 @@ def AsyncScheduledRouteBuilder(  # noqa: N802
         def scheduler_options(
             self, *, name: str, schedule: str, **options: Unpack[AsyncSchedulerOptions]
         ) -> AsyncScheduler:
+            ensure_known_options(options, AsyncSchedulerOptions)
             # A per-call client override gets its own one-off provider
             provider = client_provider
             if "client" in options:

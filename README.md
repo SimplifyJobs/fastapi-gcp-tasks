@@ -102,9 +102,8 @@ class Recipe(BaseModel):
 
 @delayed_router.post("/{branch}/make_chili")
 async def make_chili(branch: str, recipe: Recipe):
-
-
-# Do a ton of work here. The secret is to undercook the onions.
+    # Do a ton of work here. The secret is to undercook the onions.
+    ...
 
 
 app.include_router(delayed_router)
@@ -136,9 +135,9 @@ class Recipe(BaseModel):
 
 @scheduled_router.post("/pretzel_day")
 async def pretzel_day(recipe: Recipe):
+    # Everyone gets one free soft pretzel
+    ...
 
-
-# Everyone gets one free soft pretzel
 
 app.include_router(scheduled_router)
 
