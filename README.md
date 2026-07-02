@@ -389,7 +389,7 @@ def simple_task():
     return {}
 ```
 
-All options from above can be passed as `kwargs` to the decorator.
+All options from above can be passed as `kwargs` to the decorator. (`client` is accepted at runtime but excluded from the decorator's static type, since its type differs between the sync and async route builders — pass it via the builder or `.options()` to keep type checkers happy.)
 
 Additional options:
 
