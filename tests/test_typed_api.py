@@ -155,3 +155,30 @@ def test_task_default_options_accepts_builder_overrides() -> None:
         """Endpoint."""
 
     assert fn._delay_options == {"base_url": "https://worker.example.com", "countdown": 10}  # type: ignore[attr-defined]
+
+
+def test_job_changed_ignores_user_agent_on_both_sides() -> None:
+    """User-Agent must be stripped from both jobs before comparing, without mutating the request."""
+    from fastapi_gcp_tasks.scheduler import BaseScheduler
+
+    def make_job(headers: dict[str, str]) -> scheduler_v1.Job:
+        return scheduler_v1.Job(
+            name="projects/p/locations/l/jobs/j",
+            http_target=scheduler_v1.HttpTarget(uri="https://example.com", headers=headers),
+            schedule="* * * * *",
+        )
+
+    # Hook sets a User-Agent on our request; GCP stamped one on the stored job.
+    existing = make_job({"User-Agent": "Google-Cloud-Scheduler", "X-Custom": "1"})
+    request = scheduler_v1.CreateJobRequest(
+        parent="projects/p/locations/l",
+        job=make_job({"User-Agent": "my-hook-agent", "X-Custom": "1"}),
+    )
+
+    assert BaseScheduler._job_changed(job=existing, request=request) is False
+    # The request that will actually be sent must keep its headers.
+    assert request.job.http_target.headers["User-Agent"] == "my-hook-agent"
+
+    # A real difference is still detected.
+    existing_diff = make_job({"X-Custom": "2"})
+    assert BaseScheduler._job_changed(job=existing_diff, request=request) is True
