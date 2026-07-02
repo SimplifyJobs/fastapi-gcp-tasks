@@ -36,4 +36,4 @@ make docs-build            # strict build (what CI runs)
 The docs live in `docs/` and are built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/);
 the API reference is generated from source docstrings with
 [mkdocstrings](https://mkdocstrings.github.io/). They deploy to GitHub Pages automatically on every push to
-`master`.
+`master` via the Pages artifact flow (repo setting: Settings → Pages → Source → GitHub Actions).
