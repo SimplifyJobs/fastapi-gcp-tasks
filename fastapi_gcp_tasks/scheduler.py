@@ -1,5 +1,7 @@
 # Standard Library Imports
-from typing import Any, Iterable
+import copy
+from collections.abc import Iterable
+from typing import Any
 
 # Third Party Imports
 from fastapi.routing import APIRoute
@@ -107,9 +109,15 @@ class BaseScheduler(Requester):
         job.status = None
         job.last_attempt_time = None  # type: ignore[assignment]
         job.schedule_time = None  # type: ignore[assignment]
+        # Strip User-Agent from BOTH sides: GCP stamps it onto stored jobs, and a
+        # pre-create hook may set one on ours — an asymmetric strip would make
+        # identical jobs always compare as changed. Compare against a copy so the
+        # request that is actually sent to create_job keeps its headers.
+        desired = copy.deepcopy(request.job)
         job.http_target.headers.pop("User-Agent", None)
+        desired.http_target.headers.pop("User-Agent", None)
         # Proto compare works directly with `__eq__`
-        return job != request.job
+        return job != desired
 
 
 class Scheduler(BaseScheduler):

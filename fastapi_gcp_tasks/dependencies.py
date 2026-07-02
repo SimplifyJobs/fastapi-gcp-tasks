@@ -1,21 +1,9 @@
 # Standard Library Imports
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable
 
 # Third Party Imports
 from fastapi import Depends, Header, HTTPException
-
-
-def max_retries(count: int = 20) -> Callable[[Any], bool]:
-    """Raises an http exception (with status 200) after max retries are exhausted."""
-
-    def retries_dep(meta: CloudTasksHeaders = Depends()) -> bool:
-        # count starts from 0 so equality check is required
-        if meta.retry_count >= count:
-            raise HTTPException(status_code=200, detail="Max retries exhausted")
-        return True
-
-    return retries_dep
 
 
 class CloudTasksHeaders:
@@ -42,3 +30,15 @@ class CloudTasksHeaders:
         self.eta = datetime.fromtimestamp(x_cloudtasks_tasketa)
         self.previous_response = x_cloudtasks_taskpreviousresponse
         self.retry_reason = x_cloudtasks_taskretryreason
+
+
+def max_retries(count: int = 20) -> Callable[[CloudTasksHeaders], bool]:
+    """Raises an http exception (with status 200) after max retries are exhausted."""
+
+    def retries_dep(meta: CloudTasksHeaders = Depends()) -> bool:
+        # count starts from 0 so equality check is required
+        if meta.retry_count >= count:
+            raise HTTPException(status_code=200, detail="Max retries exhausted")
+        return True
+
+    return retries_dep

@@ -2,7 +2,7 @@
 
 # Standard Library Imports
 import asyncio
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 # Third Party Imports
@@ -18,6 +18,7 @@ from fastapi_gcp_tasks.async_delayed_route import AsyncDelayedRouteBuilder
 from fastapi_gcp_tasks.async_delayer import AsyncCloudTasksClientProvider, AsyncDelayer
 from fastapi_gcp_tasks.delayer import Delayer
 from fastapi_gcp_tasks.hooks import noop_hook
+from fastapi_gcp_tasks.protocols import as_async_delayed_task
 
 QUEUE_PATH = "projects/test-project/locations/us-central1/queues/test-queue"
 BASE_URL = "http://localhost"
@@ -219,17 +220,19 @@ class TestAsyncDelayedRouteBuilder:
         router = APIRouter(route_class=route_class)
 
         @router.post("/task/{user_id}")
+        @as_async_delayed_task
         async def my_task(user_id: str, item: Item) -> None:
             """Task endpoint."""
 
         app.include_router(router)
 
-        result = await my_task.delay(user_id="42", item=Item(name="x"))  # type: ignore[attr-defined]
+        result = await my_task.delay(user_id="42", item=Item(name="x"))
         assert isinstance(result, tasks_v2.Task)
         request = client.create_task.await_args.kwargs["request"]
         assert request.task.http_request.url == f"{BASE_URL}/task/42"
 
-        # .options returns a fresh AsyncDelayer with overrides applied
-        delayer = my_task.options(countdown=30)  # type: ignore[attr-defined]
+        # .options returns a fresh AsyncDelayer with overrides applied.
+        # The protocol only promises the handle interface, so cast to inspect internals.
+        delayer = cast(AsyncDelayer, my_task.options(countdown=30))
         assert isinstance(delayer, AsyncDelayer)
         assert delayer.countdown == 30

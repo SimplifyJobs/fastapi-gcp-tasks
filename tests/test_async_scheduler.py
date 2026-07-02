@@ -15,6 +15,7 @@ from fastapi_gcp_tasks.async_clients import AsyncClientProvider
 from fastapi_gcp_tasks.async_scheduled_route import AsyncScheduledRouteBuilder
 from fastapi_gcp_tasks.async_scheduler import AsyncScheduler
 from fastapi_gcp_tasks.hooks import noop_hook
+from fastapi_gcp_tasks.protocols import as_async_scheduled_task
 from fastapi_gcp_tasks.scheduler import Scheduler
 
 LOCATION_PATH = "projects/test-project/locations/us-central1"
@@ -150,13 +151,14 @@ class TestAsyncScheduler:
         router = APIRouter(route_class=route_class)
 
         @router.post("/job")
+        @as_async_scheduled_task
         async def my_job() -> None:
             """Job endpoint."""
 
         app.include_router(router)
 
-        await my_job.scheduler(name="job-a", schedule="* * * * *").schedule()  # type: ignore[attr-defined]
-        await my_job.scheduler(name="job-b", schedule="0 0 * * *").schedule()  # type: ignore[attr-defined]
+        await my_job.scheduler(name="job-a", schedule="* * * * *").schedule()
+        await my_job.scheduler(name="job-b", schedule="0 0 * * *").schedule()
 
         factory.assert_called_once()
         assert client.create_job.await_count == 2

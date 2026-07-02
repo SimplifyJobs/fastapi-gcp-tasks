@@ -2,6 +2,8 @@
 
 Strongly typed background tasks with FastAPI and Google Cloud Run, Tasks and Scheduler. This is a fork of [fastapi-gcp-tasks](https://github.com/adori/fastapi-cloud-tasks), updated with new features and bug fixes.
 
+**📚 Documentation: [simplifyjobs.github.io/fastapi-gcp-tasks](https://simplifyjobs.github.io/fastapi-gcp-tasks/)**
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -38,6 +40,7 @@ pip install fastapi-gcp-tasks
 - Strongly typed tasks.
   - Fail at invocation site to make it easier to develop and debug.
   - Breaking schema changes between versions will fail at task runner with Pydantic.
+  - Fully type-checked public API (PEP 561 `py.typed`), with opt-in static typing for `.delay`/`.scheduler` — see [Type safety](#type-safety).
 - Familiar and simple public API
   - `.delay` method that takes same arguments as the task.
   - `.scheduler` method to create recurring job.
@@ -57,6 +60,32 @@ pip install fastapi-gcp-tasks
   - With a FaaS setup, your task workers can autoscale based on load.
   - Most FaaS services have free tiers making it much cheaper than running a celery worker.
 
+## Type safety
+
+The package ships a `py.typed` marker (PEP 561), so mypy and pyright check everything you import from it.
+
+`.delay`, `.options`, and `.scheduler` are attached to your endpoint at route registration time, which plain
+function annotations can't express. Add one of the `as_*_task` decorators (identity functions at runtime) as the
+innermost decorator and type checkers will see those methods with your endpoint's own signature:
+
+```python
+from fastapi_gcp_tasks import as_delayed_task
+
+@delayed_router.post("/{branch}/make_chili")
+@as_delayed_task
+async def make_chili(branch: str, recipe: Recipe) -> None: ...
+
+make_chili.delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))  # statically checked
+make_chili.delay(branch="Scranton", recipe="oops")  # type error
+make_chili.options(countdown=1800).delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))
+```
+
+Use `as_async_delayed_task`, `as_scheduled_task`, and `as_async_scheduled_task` for the other route builders.
+Options accepted by `.options()`, `.scheduler()`, and `task_default_options` are typed via `TypedDict`s
+(`DelayOptions`, `SchedulerOptions`, ...), so misspelled or wrongly-typed options are also caught statically.
+
+Note: call `.delay()` and `.schedule()` with keyword arguments — the runtime only accepts keywords.
+
 ## How it works
 
 ### Delayed job
@@ -71,11 +100,10 @@ class Recipe(BaseModel):
   ingredients: List[str]
 
 
-@delayed_router.post("/{restaurant}/make_dinner")
-async def make_dinner(restaurant: str, recipe: Recipe):
-
-
-# Do a ton of work here.
+@delayed_router.post("/{branch}/make_chili")
+async def make_chili(branch: str, recipe: Recipe):
+    # Do a ton of work here. The secret is to undercook the onions.
+    ...
 
 
 app.include_router(delayed_router)
@@ -84,13 +112,13 @@ app.include_router(delayed_router)
 Now we can trigger the task with
 
 ```python
-make_dinner.delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav","Bhaji"]))
+make_chili.delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))
 ```
 
 If we want to trigger the task 30 minutes later
 
 ```python
-make_dinner.options(countdown=1800).delay(...)
+make_chili.options(countdown=1800).delay(...)
 ```
 
 ### Scheduled Task
@@ -105,17 +133,17 @@ class Recipe(BaseModel):
   ingredients: List[str]
 
 
-@scheduled_router.post("/home_cook")
-async def home_cook(recipe: Recipe):
+@scheduled_router.post("/pretzel_day")
+async def pretzel_day(recipe: Recipe):
+    # Everyone gets one free soft pretzel
+    ...
 
-
-# Make my own food
 
 app.include_router(scheduled_router)
 
-# If you want to make your own breakfast every morning at 7AM IST.
-home_cook.scheduler(name="test-home-cook-at-7AM-IST", schedule="0 7 * * *", time_zone="Asia/Kolkata").schedule(
-  recipe=Recipe(ingredients=["Milk", "Cereal"]))
+# Every Friday at 9AM in Scranton, it's Pretzel Day.
+pretzel_day.scheduler(name="pretzel-day-9AM-scranton", schedule="0 9 * * 5", time_zone="America/New_York").schedule(
+  recipe=Recipe(ingredients=["Sweet glaze", "Cinnamon sugar"]))
 ```
 
 ### Async usage
@@ -130,16 +158,16 @@ from fastapi_gcp_tasks import AsyncDelayedRouteBuilder
 async_delayed_router = APIRouter(route_class=AsyncDelayedRouteBuilder(...))
 
 
-@async_delayed_router.post("/{restaurant}/make_dinner")
-async def make_dinner(restaurant: str, recipe: Recipe):
+@async_delayed_router.post("/{branch}/make_chili")
+async def make_chili(branch: str, recipe: Recipe):
     ...
 
 
 app.include_router(async_delayed_router)
 
 # In an async context (endpoint, lifespan, etc):
-await make_dinner.delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav", "Bhaji"]))
-await make_dinner.options(countdown=1800).delay(...)
+await make_chili.delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))
+await make_chili.options(countdown=1800).delay(...)
 ```
 
 Similarly, `AsyncScheduledRouteBuilder` provides awaitable `.schedule()` and `.delete()` — useful when
@@ -154,15 +182,15 @@ from fastapi_gcp_tasks import AsyncScheduledRouteBuilder
 async_scheduled_router = APIRouter(route_class=AsyncScheduledRouteBuilder(...))
 
 
-@async_scheduled_router.post("/home_cook")
-async def home_cook(recipe: Recipe):
+@async_scheduled_router.post("/pretzel_day")
+async def pretzel_day(recipe: Recipe):
     ...
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await home_cook.scheduler(name="home-cook-7AM-IST", schedule="0 7 * * *", time_zone="Asia/Kolkata").schedule(
-        recipe=Recipe(ingredients=["Milk", "Cereal"])
+    await pretzel_day.scheduler(name="pretzel-day-9AM-scranton", schedule="0 9 * * 5", time_zone="America/New_York").schedule(
+        recipe=Recipe(ingredients=["Sweet glaze", "Cinnamon sugar"])
     )
     yield
 ```
@@ -363,7 +391,7 @@ def simple_task():
     return {}
 ```
 
-All options from above can be passed as `kwargs` to the decorator.
+All options from above can be passed as `kwargs` to the decorator, including `client` — the decorator is overloaded so a `CloudTasksClient` or a `CloudTasksAsyncClient` both typecheck with the matching route builder.
 
 Additional options:
 

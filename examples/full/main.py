@@ -16,31 +16,31 @@ task_id = str(uuid4())
 
 
 @app.get("/basic")
-async def basic():
+async def basic() -> dict[str, str]:
     hello.delay(p=Payload(message="Basic task"))
     return {"message": "Basic hello task scheduled"}
 
 
 @app.get("/async_basic")
-async def async_basic():
+async def async_basic() -> dict[str, str]:
     await hello_async.delay(p=Payload(message="Async basic task"))
     return {"message": "Async basic hello task scheduled"}
 
 
 @app.get("/async_with_countdown")
-async def async_with_countdown():
+async def async_with_countdown() -> dict[str, str]:
     await hello_async.options(countdown=5).delay(p=Payload(message="Async countdown task"))
     return {"message": "Async countdown hello task scheduled"}
 
 
 @app.get("/with_countdown")
-async def with_countdown():
+async def with_countdown() -> dict[str, str]:
     hello.options(countdown=5).delay(p=Payload(message="Countdown task"))
     return {"message": "Countdown hello task scheduled"}
 
 
 @app.get("/deduped")
-async def deduped(response: Response):
+async def deduped(response: Response) -> dict[str, str]:
     # Note: this does not work with cloud-tasks-emulator.
     try:
         hello.options(task_id=task_id).delay(p=Payload(message="Deduped task"))
@@ -51,7 +51,7 @@ async def deduped(response: Response):
 
 
 @app.get("/fail")
-async def fail():
+async def fail() -> dict[str, str]:
     fail_twice.delay()
     return {"message": "The triggered task will fail twice and then be marked done automatically"}
 

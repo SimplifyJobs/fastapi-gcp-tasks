@@ -1,0 +1,90 @@
+site_name: FastAPI GCP Tasks
+site_description: >-
+  Strongly typed background tasks and cron jobs for FastAPI on Google Cloud (GCP) —
+  a serverless celery alternative built on Cloud Tasks, Cloud Scheduler, and Cloud Run.
+site_url: https://simplifyjobs.github.io/fastapi-gcp-tasks/
+repo_url: https://github.com/SimplifyJobs/fastapi-gcp-tasks
+repo_name: SimplifyJobs/fastapi-gcp-tasks
+edit_uri: edit/master/docs/
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Guide:
+      - Delayed tasks: guide/delayed-tasks.md
+      - Scheduled tasks: guide/scheduled-tasks.md
+      - Async usage: guide/async.md
+      - Type safety: guide/type-safety.md
+      - Hooks & dependencies: guide/hooks-and-dependencies.md
+      - Configuration: guide/configuration.md
+      - Deploying to Cloud Run: guide/deployment.md
+  - API reference:
+      - Route builders: api/route-builders.md
+      - Typed protocols: api/protocols.md
+      - Delayers & schedulers: api/delayers-and-schedulers.md
+      - Hooks: api/hooks.md
+      - Dependencies: api/dependencies.md
+      - Utilities: api/utils.md
+      - Exceptions: api/exceptions.md
+  - Contributing: contributing.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            show_root_heading: true
+            show_source: true
+            show_signature_annotations: true
+            separate_signature: true
+            members_order: source
+            merge_init_into_class: true

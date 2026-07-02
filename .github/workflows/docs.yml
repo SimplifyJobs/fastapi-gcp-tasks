@@ -1,0 +1,64 @@
+name: Docs
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+# No job ever needs contents: write — the deploy job publishes the built
+# artifact through the Pages API (pages: write + id-token: write) instead of
+# pushing a gh-pages branch.
+permissions:
+  contents: read
+
+# Serialize per ref so a slow run from an older master push can't finish
+# after a newer one and publish stale site content.
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: uv sync --locked --group docs
+
+      - name: Build docs
+        run: uv run --group docs mkdocs build --strict
+
+      - name: Upload Pages artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  # Deploys the exact artifact that passed the strict build — no rebuild, no
+  # dependency installation, and no write-scoped token in this job beyond the
+  # Pages deployment itself.
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

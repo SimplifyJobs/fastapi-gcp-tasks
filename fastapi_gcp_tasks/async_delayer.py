@@ -1,6 +1,7 @@
 # Standard Library Imports
 import asyncio
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 # Third Party Imports
 from fastapi.routing import APIRoute
