@@ -10,7 +10,7 @@ from google.cloud import tasks_v2
 # Imports from this repository
 from fastapi_gcp_tasks.delayer import Delayer
 from fastapi_gcp_tasks.hooks import DelayedTaskHook, noop_hook
-from fastapi_gcp_tasks.protocols import DelayOptions
+from fastapi_gcp_tasks.protocols import DelayOptions, ensure_known_options
 from fastapi_gcp_tasks.utils import ensure_queue
 
 
@@ -63,6 +63,7 @@ def DelayedRouteBuilder(  # noqa: N802
             return original_route_handler
 
         def delay_options(self, **options: Unpack[DelayOptions]) -> Delayer:
+            ensure_known_options(options, DelayOptions)
             opts: DelayOptions = {}
             endpoint_defaults = getattr(self.endpoint, "_delay_options", None)
             if endpoint_defaults:

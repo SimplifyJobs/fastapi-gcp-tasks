@@ -14,7 +14,7 @@ from fastapi_gcp_tasks.async_delayer import (
     AsyncDelayer,
 )
 from fastapi_gcp_tasks.hooks import DelayedTaskHook, noop_hook
-from fastapi_gcp_tasks.protocols import AsyncDelayOptions
+from fastapi_gcp_tasks.protocols import AsyncDelayOptions, ensure_known_options
 
 
 def AsyncDelayedRouteBuilder(  # noqa: N802
@@ -76,6 +76,7 @@ def AsyncDelayedRouteBuilder(  # noqa: N802
             return original_route_handler
 
         def delay_options(self, **options: Unpack[AsyncDelayOptions]) -> AsyncDelayer:
+            ensure_known_options(options, AsyncDelayOptions)
             opts: AsyncDelayOptions = {}
             endpoint_defaults = getattr(self.endpoint, "_delay_options", None)
             if endpoint_defaults:

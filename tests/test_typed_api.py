@@ -5,6 +5,7 @@ from typing import cast
 from unittest.mock import MagicMock
 
 # Third Party Imports
+import pytest
 from fastapi import APIRouter, FastAPI
 from google.cloud import scheduler_v1, tasks_v2
 from pydantic import BaseModel
@@ -119,3 +120,38 @@ def test_scheduled_route_typed_flow() -> None:
     assert scheduler.time_zone == "Asia/Kolkata"
     assert scheduler.force is True
     assert scheduler.job_id.endswith("/jobs/my-job")
+
+
+def test_unknown_options_raise_type_error() -> None:
+    """Unknown option keys must fail fast at runtime instead of being silently dropped."""
+    client = MagicMock(spec=tasks_v2.CloudTasksClient)
+    route_class = DelayedRouteBuilder(
+        base_url=BASE_URL,
+        queue_path=QUEUE_PATH,
+        client=client,
+    )
+    app = FastAPI()
+    router = APIRouter(route_class=route_class)
+
+    @router.post("/task")
+    @as_delayed_task
+    def my_task() -> None:
+        """Task endpoint."""
+
+    app.include_router(router)
+
+    with pytest.raises(TypeError, match="countdwn"):
+        my_task.options(countdwn=5)  # type: ignore[call-arg]
+
+    with pytest.raises(TypeError, match="countdwn"):
+        task_default_options(countdwn=5)  # type: ignore[call-arg]
+
+
+def test_task_default_options_accepts_builder_overrides() -> None:
+    """Builder-level defaults like base_url and client are valid decorator options at runtime."""
+
+    @task_default_options(base_url="https://worker.example.com", countdown=10)
+    def fn() -> None:
+        """Endpoint."""
+
+    assert fn._delay_options == {"base_url": "https://worker.example.com", "countdown": 10}  # type: ignore[attr-defined]

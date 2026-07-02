@@ -1,5 +1,5 @@
 # Standard Library Imports
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import ParamSpec, Protocol, TypedDict, TypeVar, Unpack, cast
 
 # Third Party Imports
@@ -13,29 +13,31 @@ R = TypeVar("R", covariant=True)
 
 
 class TaskDefaultOptions(TypedDict, total=False):
-    """Options accepted by the ``task_default_options`` decorator (shared by sync and async delayed routes)."""
+    """
+    Options accepted by the ``task_default_options`` decorator (shared by sync and async delayed routes).
+
+    ``client`` is the only delay option not accepted here, because its type differs
+    between the sync and async route builders.
+    """
 
     countdown: int
     task_id: str
     task_create_timeout: float
+    base_url: str
+    queue_path: str
+    pre_create_hook: DelayedTaskHook
 
 
 class DelayOptions(TaskDefaultOptions, total=False):
     """Per-call overrides accepted by ``.options()`` on a delayed task endpoint."""
 
-    base_url: str
-    queue_path: str
     client: tasks_v2.CloudTasksClient
-    pre_create_hook: DelayedTaskHook
 
 
 class AsyncDelayOptions(TaskDefaultOptions, total=False):
     """Per-call overrides accepted by ``.options()`` on an async delayed task endpoint."""
 
-    base_url: str
-    queue_path: str
     client: tasks_v2.CloudTasksAsyncClient | Callable[[], tasks_v2.CloudTasksAsyncClient]
-    pre_create_hook: DelayedTaskHook
 
 
 class SchedulerOptions(TypedDict, total=False):
@@ -62,6 +64,18 @@ class AsyncSchedulerOptions(TypedDict, total=False):
     force: bool
     client: scheduler_v1.CloudSchedulerAsyncClient | Callable[[], scheduler_v1.CloudSchedulerAsyncClient]
     pre_create_hook: ScheduledHook
+
+
+def ensure_known_options(options: Mapping[str, object], allowed: type) -> None:
+    """
+    Raise TypeError if ``options`` contains keys not declared on the ``allowed`` TypedDict.
+
+    Type checkers already reject unknown keys statically; this keeps unchecked
+    callers failing fast at runtime instead of silently dropping options.
+    """
+    unexpected = set(options) - (allowed.__required_keys__ | allowed.__optional_keys__)  # type: ignore[attr-defined]
+    if unexpected:
+        raise TypeError(f"Unknown option(s) for {allowed.__name__}: {', '.join(sorted(unexpected))}")
 
 
 class DelayerHandle(Protocol[P]):

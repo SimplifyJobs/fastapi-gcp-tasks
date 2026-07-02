@@ -9,7 +9,7 @@ from google.cloud import scheduler_v1
 
 # Imports from this repository
 from fastapi_gcp_tasks.hooks import ScheduledHook, noop_hook
-from fastapi_gcp_tasks.protocols import SchedulerOptions
+from fastapi_gcp_tasks.protocols import SchedulerOptions, ensure_known_options
 from fastapi_gcp_tasks.scheduler import Scheduler
 
 
@@ -52,6 +52,7 @@ def ScheduledRouteBuilder(  # noqa: N802
             return original_route_handler
 
         def scheduler_options(self, *, name: str, schedule: str, **options: Unpack[SchedulerOptions]) -> Scheduler:
+            ensure_known_options(options, SchedulerOptions)
             return Scheduler(
                 route=self,
                 base_url=options.get("base_url", base_url),
