@@ -63,11 +63,7 @@ def AsyncDelayedRouteBuilder(  # noqa: N802
     if pre_create_hook is None:
         pre_create_hook = noop_hook
 
-    client_provider = AsyncCloudTasksClientProvider(
-        client=client,
-        queue_path=queue_path,
-        auto_create_queue=auto_create_queue,
-    )
+    client_provider = AsyncCloudTasksClientProvider(client=client, auto_create_queue=auto_create_queue)
 
     class AsyncTaskRouteMixin(APIRoute):
         def get_route_handler(self) -> Callable:
@@ -92,7 +88,6 @@ def AsyncDelayedRouteBuilder(  # noqa: N802
             if "client" in delay_opts:
                 delay_opts["client_provider"] = AsyncCloudTasksClientProvider(
                     client=delay_opts.pop("client"),  # type: ignore[arg-type]
-                    queue_path=str(delay_opts["queue_path"]),
                     auto_create_queue=auto_create_queue,
                 )
 

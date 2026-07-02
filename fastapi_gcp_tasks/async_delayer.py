@@ -19,14 +19,13 @@ class AsyncCloudTasksClientProvider(AsyncClientProvider[tasks_v2.CloudTasksAsync
     """
     Lazily resolves and caches a CloudTasksAsyncClient inside the running event loop.
 
-    If ``auto_create_queue`` is True, the queue is ensured exactly once before the
-    client is first handed out; a failed ensure is retried on the next call while
-    the already-resolved client stays cached.
+    If ``auto_create_queue`` is True, each queue path requested via ``get_for_queue``
+    is ensured exactly once before the client is handed out; a failed ensure is
+    retried on the next call while the already-resolved client stays cached.
 
     Attributes
     ----------
-        queue_path (str): The path to the Cloud Tasks queue.
-        auto_create_queue (bool): Whether to ensure the queue exists on first use.
+        auto_create_queue (bool): Whether to ensure queues exist on first use.
 
     """
 
@@ -34,23 +33,21 @@ class AsyncCloudTasksClientProvider(AsyncClientProvider[tasks_v2.CloudTasksAsync
         self,
         *,
         client: tasks_v2.CloudTasksAsyncClient | AsyncCloudTasksClientFactory | None,
-        queue_path: str,
         auto_create_queue: bool = False,
     ) -> None:
         super().__init__(client=client, client_cls=tasks_v2.CloudTasksAsyncClient)
-        self.queue_path = queue_path
         self.auto_create_queue = auto_create_queue
-        self._queue_ensured = not auto_create_queue
+        self._ensured_queues: set[str] = set()
         self._ensure_lock = asyncio.Lock()
 
-    async def get(self) -> tasks_v2.CloudTasksAsyncClient:
-        """Return the cached client, ensuring the queue exists on first call if configured."""
-        client = await super().get()
-        if not self._queue_ensured:
+    async def get_for_queue(self, *, queue_path: str) -> tasks_v2.CloudTasksAsyncClient:
+        """Return the cached client, ensuring the given queue exists first if configured."""
+        client = await self.get()
+        if self.auto_create_queue and queue_path not in self._ensured_queues:
             async with self._ensure_lock:
-                if not self._queue_ensured:
-                    await ensure_queue_async(client=client, path=self.queue_path)
-                    self._queue_ensured = True
+                if queue_path not in self._ensured_queues:
+                    await ensure_queue_async(client=client, path=queue_path)
+                    self._ensured_queues.add(queue_path)
         return client
 
 
@@ -91,6 +88,6 @@ class AsyncDelayer(BaseDelayer):
 
     async def delay(self, **kwargs: Any) -> tasks_v2.Task:
         """Delay a task on Cloud Tasks without blocking the event loop."""
-        client = await self.client_provider.get()
+        client = await self.client_provider.get_for_queue(queue_path=self.queue_path)
         request = self._build_create_task_request(values=kwargs)
         return await client.create_task(request=request, timeout=self.task_create_timeout)

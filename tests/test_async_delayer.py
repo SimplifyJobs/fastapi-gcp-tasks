@@ -51,11 +51,7 @@ def _mock_async_client() -> MagicMock:
 
 
 def _make_delayer(client: Any, *, auto_create_queue: bool = False, **kwargs: Any) -> AsyncDelayer:
-    provider = AsyncCloudTasksClientProvider(
-        client=client,
-        queue_path=QUEUE_PATH,
-        auto_create_queue=auto_create_queue,
-    )
+    provider = AsyncCloudTasksClientProvider(client=client, auto_create_queue=auto_create_queue)
     return AsyncDelayer(
         route=_make_route(),
         base_url=BASE_URL,
@@ -129,7 +125,7 @@ class TestAsyncCloudTasksClientProvider:
         """A client factory should be called once even across concurrent delays."""
         client = _mock_async_client()
         factory = MagicMock(return_value=client)
-        provider = AsyncCloudTasksClientProvider(client=factory, queue_path=QUEUE_PATH)
+        provider = AsyncCloudTasksClientProvider(client=factory)
 
         results = await asyncio.gather(*(provider.get() for _ in range(10)))
 
@@ -139,7 +135,7 @@ class TestAsyncCloudTasksClientProvider:
     async def test_client_instance_used_as_is(self) -> None:
         """A client instance should be returned unchanged."""
         client = _mock_async_client()
-        provider = AsyncCloudTasksClientProvider(client=client, queue_path=QUEUE_PATH)
+        provider = AsyncCloudTasksClientProvider(client=client)
 
         assert await provider.get() is client
 
@@ -179,16 +175,30 @@ class TestAsyncCloudTasksClientProvider:
         factory.assert_called_once()
         assert client.create_queue.await_count == 2
 
+    async def test_auto_create_queue_ensures_overridden_queue_path(self) -> None:
+        """Each distinct queue path used through the provider should be ensured once."""
+        client = _mock_async_client()
+        provider = AsyncCloudTasksClientProvider(client=client, auto_create_queue=True)
+        other_queue = "projects/test-project/locations/us-central1/queues/other-queue"
+
+        await provider.get_for_queue(queue_path=QUEUE_PATH)
+        await provider.get_for_queue(queue_path=other_queue)
+        await provider.get_for_queue(queue_path=other_queue)
+
+        assert client.create_queue.await_count == 2
+        ensured = {call.kwargs["request"].queue.name for call in client.create_queue.await_args_list}
+        assert ensured == {QUEUE_PATH, other_queue}
+
     async def test_wrong_client_type_raises_clear_error(self) -> None:
         """A non-async, non-factory client should fail with a descriptive TypeError."""
-        provider = AsyncCloudTasksClientProvider(client=object(), queue_path=QUEUE_PATH)  # type: ignore[arg-type]
+        provider = AsyncCloudTasksClientProvider(client=object())  # type: ignore[arg-type]
 
         with pytest.raises(TypeError, match="CloudTasksAsyncClient"):
             await provider.get()
 
     async def test_factory_returning_wrong_type_raises_clear_error(self) -> None:
         """A factory that returns the wrong type should fail with a descriptive TypeError."""
-        provider = AsyncCloudTasksClientProvider(client=lambda: None, queue_path=QUEUE_PATH)  # type: ignore[arg-type,return-value]
+        provider = AsyncCloudTasksClientProvider(client=lambda: None)  # type: ignore[arg-type,return-value]
 
         with pytest.raises(TypeError, match="factory must return a CloudTasksAsyncClient"):
             await provider.get()
