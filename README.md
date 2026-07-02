@@ -71,13 +71,13 @@ innermost decorator and type checkers will see those methods with your endpoint'
 ```python
 from fastapi_gcp_tasks import as_delayed_task
 
-@delayed_router.post("/{restaurant}/make_dinner")
+@delayed_router.post("/{branch}/make_chili")
 @as_delayed_task
-async def make_dinner(restaurant: str, recipe: Recipe) -> None: ...
+async def make_chili(branch: str, recipe: Recipe) -> None: ...
 
-make_dinner.delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav", "Bhaji"]))  # statically checked
-make_dinner.delay(restaurant="Taj", recipe="oops")  # type error
-make_dinner.options(countdown=1800).delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav", "Bhaji"]))
+make_chili.delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))  # statically checked
+make_chili.delay(branch="Scranton", recipe="oops")  # type error
+make_chili.options(countdown=1800).delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))
 ```
 
 Use `as_async_delayed_task`, `as_scheduled_task`, and `as_async_scheduled_task` for the other route builders.
@@ -100,11 +100,11 @@ class Recipe(BaseModel):
   ingredients: List[str]
 
 
-@delayed_router.post("/{restaurant}/make_dinner")
-async def make_dinner(restaurant: str, recipe: Recipe):
+@delayed_router.post("/{branch}/make_chili")
+async def make_chili(branch: str, recipe: Recipe):
 
 
-# Do a ton of work here.
+# Do a ton of work here. The secret is to undercook the onions.
 
 
 app.include_router(delayed_router)
@@ -113,13 +113,13 @@ app.include_router(delayed_router)
 Now we can trigger the task with
 
 ```python
-make_dinner.delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav","Bhaji"]))
+make_chili.delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))
 ```
 
 If we want to trigger the task 30 minutes later
 
 ```python
-make_dinner.options(countdown=1800).delay(...)
+make_chili.options(countdown=1800).delay(...)
 ```
 
 ### Scheduled Task
@@ -134,17 +134,17 @@ class Recipe(BaseModel):
   ingredients: List[str]
 
 
-@scheduled_router.post("/home_cook")
-async def home_cook(recipe: Recipe):
+@scheduled_router.post("/pretzel_day")
+async def pretzel_day(recipe: Recipe):
 
 
-# Make my own food
+# Everyone gets one free soft pretzel
 
 app.include_router(scheduled_router)
 
-# If you want to make your own breakfast every morning at 7AM IST.
-home_cook.scheduler(name="test-home-cook-at-7AM-IST", schedule="0 7 * * *", time_zone="Asia/Kolkata").schedule(
-  recipe=Recipe(ingredients=["Milk", "Cereal"]))
+# Every Friday at 9AM in Scranton, it's Pretzel Day.
+pretzel_day.scheduler(name="pretzel-day-9AM-scranton", schedule="0 9 * * 5", time_zone="America/New_York").schedule(
+  recipe=Recipe(ingredients=["Sweet glaze", "Cinnamon sugar"]))
 ```
 
 ### Async usage
@@ -159,16 +159,16 @@ from fastapi_gcp_tasks import AsyncDelayedRouteBuilder
 async_delayed_router = APIRouter(route_class=AsyncDelayedRouteBuilder(...))
 
 
-@async_delayed_router.post("/{restaurant}/make_dinner")
-async def make_dinner(restaurant: str, recipe: Recipe):
+@async_delayed_router.post("/{branch}/make_chili")
+async def make_chili(branch: str, recipe: Recipe):
     ...
 
 
 app.include_router(async_delayed_router)
 
 # In an async context (endpoint, lifespan, etc):
-await make_dinner.delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav", "Bhaji"]))
-await make_dinner.options(countdown=1800).delay(...)
+await make_chili.delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))
+await make_chili.options(countdown=1800).delay(...)
 ```
 
 Similarly, `AsyncScheduledRouteBuilder` provides awaitable `.schedule()` and `.delete()` — useful when
@@ -183,15 +183,15 @@ from fastapi_gcp_tasks import AsyncScheduledRouteBuilder
 async_scheduled_router = APIRouter(route_class=AsyncScheduledRouteBuilder(...))
 
 
-@async_scheduled_router.post("/home_cook")
-async def home_cook(recipe: Recipe):
+@async_scheduled_router.post("/pretzel_day")
+async def pretzel_day(recipe: Recipe):
     ...
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await home_cook.scheduler(name="home-cook-7AM-IST", schedule="0 7 * * *", time_zone="Asia/Kolkata").schedule(
-        recipe=Recipe(ingredients=["Milk", "Cereal"])
+    await pretzel_day.scheduler(name="pretzel-day-9AM-scranton", schedule="0 9 * * 5", time_zone="America/New_York").schedule(
+        recipe=Recipe(ingredients=["Sweet glaze", "Cinnamon sugar"])
     )
     yield
 ```
