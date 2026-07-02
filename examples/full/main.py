@@ -8,7 +8,7 @@ from google.api_core.exceptions import AlreadyExists
 # Imports from this repository
 from examples.full.serializer import Payload
 from examples.full.settings import IS_LOCAL
-from examples.full.tasks import fail_twice, hello
+from examples.full.tasks import fail_twice, hello, hello_async
 
 app = FastAPI()
 
@@ -19,6 +19,18 @@ task_id = str(uuid4())
 async def basic():
     hello.delay(p=Payload(message="Basic task"))
     return {"message": "Basic hello task scheduled"}
+
+
+@app.get("/async_basic")
+async def async_basic():
+    await hello_async.delay(p=Payload(message="Async basic task"))
+    return {"message": "Async basic hello task scheduled"}
+
+
+@app.get("/async_with_countdown")
+async def async_with_countdown():
+    await hello_async.options(countdown=5).delay(p=Payload(message="Async countdown task"))
+    return {"message": "Async countdown hello task scheduled"}
 
 
 @app.get("/with_countdown")
