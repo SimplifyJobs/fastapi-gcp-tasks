@@ -70,12 +70,21 @@ def DelayedRouteBuilder(  # noqa: N802
                 opts.update(endpoint_defaults)
             opts.update(options)
 
+            # An async client here (e.g. via task_default_options) would make
+            # create_task return a never-awaited coroutine — fail fast instead.
+            resolved_client = opts.get("client", task_client)
+            if not isinstance(resolved_client, tasks_v2.CloudTasksClient):
+                raise TypeError(
+                    f"DelayedRouteBuilder requires a CloudTasksClient; got {type(resolved_client).__name__}. "
+                    "Use AsyncDelayedRouteBuilder for CloudTasksAsyncClient."
+                )
+
             return Delayer(
                 route=self,
                 base_url=opts.get("base_url", base_url),
                 queue_path=opts.get("queue_path", queue_path),
                 task_create_timeout=opts.get("task_create_timeout", task_create_timeout),
-                client=opts.get("client", task_client),
+                client=resolved_client,
                 pre_create_hook=opts.get("pre_create_hook", hook),
                 countdown=opts.get("countdown", 0),
                 task_id=opts.get("task_id"),

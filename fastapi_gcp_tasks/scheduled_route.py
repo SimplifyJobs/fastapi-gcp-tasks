@@ -53,12 +53,22 @@ def ScheduledRouteBuilder(  # noqa: N802
 
         def scheduler_options(self, *, name: str, schedule: str, **options: Unpack[SchedulerOptions]) -> Scheduler:
             ensure_known_options(options, SchedulerOptions)
+
+            # An async client here would make create_job return a never-awaited
+            # coroutine — fail fast instead.
+            resolved_client = options.get("client", scheduler_client)
+            if not isinstance(resolved_client, scheduler_v1.CloudSchedulerClient):
+                raise TypeError(
+                    f"ScheduledRouteBuilder requires a CloudSchedulerClient; got {type(resolved_client).__name__}. "
+                    "Use AsyncScheduledRouteBuilder for CloudSchedulerAsyncClient."
+                )
+
             return Scheduler(
                 route=self,
                 base_url=options.get("base_url", base_url),
                 location_path=options.get("location_path", location_path),
                 schedule=schedule,
-                client=options.get("client", scheduler_client),
+                client=resolved_client,
                 pre_create_hook=options.get("pre_create_hook", hook),
                 name=name,
                 job_create_timeout=options.get("job_create_timeout", job_create_timeout),
