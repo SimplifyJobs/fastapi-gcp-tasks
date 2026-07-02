@@ -1,5 +1,6 @@
 # Standard Library Imports
-from typing import Any, Dict, List, Tuple, get_origin
+from types import UnionType
+from typing import Any, get_origin
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 # Third Party Imports
@@ -38,7 +39,7 @@ class Requester:
         self.route = route
         self.base_url = base_url.rstrip("/")
 
-    def _headers(self, *, values: Dict[str, Any]) -> Dict[str, str]:
+    def _headers(self, *, values: dict[str, Any]) -> dict[str, str]:
         headers = _err_val(request_params_to_args(self.route.dependant.header_params, values))
         cookies = _err_val(request_params_to_args(self.route.dependant.cookie_params, values))
         if len(cookies) > 0:
@@ -48,7 +49,7 @@ class Requester:
         # Always send string headers and skip all headers which are supposed to be sent by cloudtasks
         return {str(k): str(v) for (k, v) in headers.items() if not str(k).startswith("x_cloudtasks_")}
 
-    def _url(self, *, values: Dict[str, Any]) -> str:
+    def _url(self, *, values: dict[str, Any]) -> str:
         route = self.route
         path_values = _err_val(request_params_to_args(route.dependant.path_params, values))
         for name, converter in route.param_convertors.items():
@@ -79,7 +80,7 @@ class Requester:
         url_parts[4] = urlencode(query)
         return urlunparse(url_parts)
 
-    def _body(self, *, values: Dict[str, Any]) -> bytes | None:
+    def _body(self, *, values: dict[str, Any]) -> bytes | None:
         body = None
         body_field = self.route.body_field
         if body_field and body_field.name:
@@ -90,13 +91,22 @@ class Requester:
                 got_body = body_field.get_default()
             body_type = body_field.field_info.annotation
             check_type = get_origin(body_type) or body_type
-            if body_type is not None and isinstance(check_type, type) and not isinstance(got_body, check_type):
+            # Union members may not all be runtime-checkable classes, so unions are
+            # skipped. typing.Union's origin is not a class and falls out of the
+            # isinstance(check_type, type) check; PEP 604 unions (X | Y) have
+            # types.UnionType as origin, which IS a class, so exclude it explicitly.
+            if (
+                body_type is not None
+                and check_type is not UnionType
+                and isinstance(check_type, type)
+                and not isinstance(got_body, check_type)
+            ):
                 raise WrongTypeError(field=body_field.name, type=body_type)
             body = json.dumps(jsonable_encoder(got_body)).encode()
         return body
 
 
-def _err_val(resp: Tuple[Dict[str, Any], List[Any]]) -> Dict[str, Any]:
+def _err_val(resp: tuple[dict[str, Any], list[Any]]) -> dict[str, Any]:
     values, errors = resp
 
     if len(errors) != 0:

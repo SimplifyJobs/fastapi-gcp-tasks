@@ -38,6 +38,7 @@ pip install fastapi-gcp-tasks
 - Strongly typed tasks.
   - Fail at invocation site to make it easier to develop and debug.
   - Breaking schema changes between versions will fail at task runner with Pydantic.
+  - Fully type-checked public API (PEP 561 `py.typed`), with opt-in static typing for `.delay`/`.scheduler` — see [Type safety](#type-safety).
 - Familiar and simple public API
   - `.delay` method that takes same arguments as the task.
   - `.scheduler` method to create recurring job.
@@ -56,6 +57,32 @@ pip install fastapi-gcp-tasks
 - Autoscale.
   - With a FaaS setup, your task workers can autoscale based on load.
   - Most FaaS services have free tiers making it much cheaper than running a celery worker.
+
+## Type safety
+
+The package ships a `py.typed` marker (PEP 561), so mypy and pyright check everything you import from it.
+
+`.delay`, `.options`, and `.scheduler` are attached to your endpoint at route registration time, which plain
+function annotations can't express. Add one of the `as_*_task` decorators (identity functions at runtime) as the
+innermost decorator and type checkers will see those methods with your endpoint's own signature:
+
+```python
+from fastapi_gcp_tasks import as_delayed_task
+
+@delayed_router.post("/{restaurant}/make_dinner")
+@as_delayed_task
+async def make_dinner(restaurant: str, recipe: Recipe) -> None: ...
+
+make_dinner.delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav", "Bhaji"]))  # statically checked
+make_dinner.delay(restaurant="Taj", recipe="oops")  # type error
+make_dinner.options(countdown=1800).delay(restaurant="Taj", recipe=Recipe(ingredients=["Pav", "Bhaji"]))
+```
+
+Use `as_async_delayed_task`, `as_scheduled_task`, and `as_async_scheduled_task` for the other route builders.
+Options accepted by `.options()`, `.scheduler()`, and `task_default_options` are typed via `TypedDict`s
+(`DelayOptions`, `SchedulerOptions`, ...), so misspelled or wrongly-typed options are also caught statically.
+
+Note: call `.delay()` and `.schedule()` with keyword arguments — the runtime only accepts keywords.
 
 ## How it works
 

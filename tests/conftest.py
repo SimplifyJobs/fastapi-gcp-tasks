@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from typing import Generator
+from collections.abc import Generator
 
 import pytest
 import requests
@@ -51,7 +51,7 @@ def _wait_for_emulator(host: str, timeout_seconds: int = 30) -> None:
     raise TimeoutError(f"Emulator not ready at {host}")
 
 
-def _wait_for_service(url: str, proc: subprocess.Popen, log_file: str, timeout_seconds: int = 30) -> None:  # type: ignore[type-arg]
+def _wait_for_service(url: str, proc: subprocess.Popen[bytes], log_file: str, timeout_seconds: int = 30) -> None:
     """Wait for the uvicorn server to respond, aborting early if the process exits."""
     start = time.time()
     while time.time() - start < timeout_seconds:
@@ -73,7 +73,7 @@ def _wait_for_service(url: str, proc: subprocess.Popen, log_file: str, timeout_s
 
 
 @pytest.fixture(scope="session")
-def uvicorn_server(settings: Settings, base_url: str) -> Generator[subprocess.Popen, None, None]:  # type: ignore[type-arg]
+def uvicorn_server(settings: Settings, base_url: str) -> Generator[subprocess.Popen[bytes], None, None]:
     """Start a uvicorn server for the example app and tear it down after tests."""
     _wait_for_emulator(settings.cloud_tasks_emulator_url)
 

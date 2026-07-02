@@ -1,6 +1,7 @@
 # Standard Library Imports
 import datetime
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 # Third Party Imports
 from fastapi.routing import APIRoute
@@ -75,7 +76,7 @@ class BaseDelayer(Requester):
     def _schedule(self) -> timestamp_pb2.Timestamp | None:
         if self.countdown is None or self.countdown <= 0:
             return None
-        d = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=self.countdown)
+        d = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=self.countdown)
         timestamp = timestamp_pb2.Timestamp()
         timestamp.FromDatetime(d)
         return timestamp

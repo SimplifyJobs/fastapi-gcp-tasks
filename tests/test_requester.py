@@ -1,7 +1,6 @@
 """Unit tests for Requester._body covering missing-param and generic-type bugs."""
 
 # Standard Library Imports
-from typing import List, Union
 
 # Third Party Imports
 import pytest
@@ -34,12 +33,12 @@ async def optional_body_endpoint(item: Item = Item(name="default")) -> None:
 
 
 @app.post("/list_body")
-async def list_body_endpoint(items: List[Item]) -> None:
+async def list_body_endpoint(items: list[Item]) -> None:
     """Endpoint with a parameterized generic body."""
 
 
 @app.post("/union_body")
-async def union_body_endpoint(item: Union[Item, str] = "fallback") -> None:
+async def union_body_endpoint(item: Item | str = "fallback") -> None:
     """Endpoint with a Union-typed body."""
 
 

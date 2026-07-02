@@ -1,5 +1,6 @@
 # Standard Library Imports
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import TypeVar
 
 # Third Party Imports
 from google.cloud import scheduler_v1, tasks_v2
@@ -8,16 +9,18 @@ from google.protobuf import duration_pb2
 DelayedTaskHook = Callable[[tasks_v2.CreateTaskRequest], tasks_v2.CreateTaskRequest]
 ScheduledHook = Callable[[scheduler_v1.CreateJobRequest], scheduler_v1.CreateJobRequest]
 
+RequestT = TypeVar("RequestT")
 
-def noop_hook(request: Any) -> Any:
+
+def noop_hook(request: RequestT) -> RequestT:
     """Inspired by https://github.com/kelseyhightower/nocode."""
     return request
 
 
-def chained_hook(*hooks: Callable[[Any], Any]) -> Callable[[Any], Any]:
+def chained_hook(*hooks: Callable[[RequestT], RequestT]) -> Callable[[RequestT], RequestT]:
     """Call all hooks sequentially with the result from the previous hook."""
 
-    def chain(request: Any) -> Any:
+    def chain(request: RequestT) -> RequestT:
         for hook in hooks:
             request = hook(request)
         return request

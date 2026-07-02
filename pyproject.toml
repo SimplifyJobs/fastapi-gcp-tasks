@@ -23,6 +23,7 @@ dev = [
     "requests>=2.32.3",
     "pydantic-settings>=2.0.0",
     "pytest-asyncio>=1.4.0",
+    "types-requests>=2.33.0.20260518",
 ]
 
 [tool.pytest.ini_options]
@@ -30,11 +31,18 @@ asyncio_mode = "auto"
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]
+strict = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+# grpc has no type stubs
+module = ["grpc", "grpc.*"]
 ignore_missing_imports = true
-disallow_untyped_defs = true
-check_untyped_defs = true
-warn_redundant_casts = true
-warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# Tests and examples call a few google-cloud helpers that ship without annotations
+module = ["tests.*", "examples.*"]
+disallow_untyped_calls = false
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
@@ -83,6 +91,7 @@ select = [
     "BLE", # flake8-blind-except
     "T100", # flake8-debugger
     "PT", # flake8-pytest
+    "UP", # pyupgrade
 ]
 ignore = [
     "E501", # line too long, handled by black

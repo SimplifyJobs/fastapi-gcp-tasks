@@ -1,7 +1,9 @@
 # Standard Library Imports
-from typing import Any, Callable, Type
+from collections.abc import Callable, Coroutine
+from typing import Any, Unpack
 
 # Third Party Imports
+from fastapi import Request, Response
 from fastapi.routing import APIRoute
 from google.cloud import tasks_v2
 
@@ -12,6 +14,7 @@ from fastapi_gcp_tasks.async_delayer import (
     AsyncDelayer,
 )
 from fastapi_gcp_tasks.hooks import DelayedTaskHook, noop_hook
+from fastapi_gcp_tasks.protocols import AsyncDelayOptions
 
 
 def AsyncDelayedRouteBuilder(  # noqa: N802
@@ -22,7 +25,7 @@ def AsyncDelayedRouteBuilder(  # noqa: N802
     pre_create_hook: DelayedTaskHook | None = None,
     client: tasks_v2.CloudTasksAsyncClient | AsyncCloudTasksClientFactory | None = None,
     auto_create_queue: bool = False,
-) -> Type[APIRoute]:
+) -> type[APIRoute]:
     """
     Returns a Mixin that should be used to override route_class, with an awaitable .delay.
 
@@ -49,6 +52,7 @@ def AsyncDelayedRouteBuilder(  # noqa: N802
           name: str
 
       @async_delayed_router.post("/on_user_create/{user_id}")
+      @as_async_delayed_task  # optional: makes .delay visible to type checkers
       async def on_user_create(user_id: str, data: UserData):
           # do work here
           # Return values are meaningless
@@ -60,41 +64,41 @@ def AsyncDelayedRouteBuilder(  # noqa: N802
     ```
 
     """
-    if pre_create_hook is None:
-        pre_create_hook = noop_hook
+    hook: DelayedTaskHook = pre_create_hook if pre_create_hook is not None else noop_hook
 
     client_provider = AsyncCloudTasksClientProvider(client=client, auto_create_queue=auto_create_queue)
 
     class AsyncTaskRouteMixin(APIRoute):
-        def get_route_handler(self) -> Callable:
+        def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
             original_route_handler = super().get_route_handler()
             self.endpoint.options = self.delay_options  # type: ignore[attr-defined]
             self.endpoint.delay = self.delay  # type: ignore[attr-defined]
             return original_route_handler
 
-        def delay_options(self, **options: Any) -> AsyncDelayer:
-            delay_opts = {
-                "base_url": base_url,
-                "queue_path": queue_path,
-                "task_create_timeout": task_create_timeout,
-                "client_provider": client_provider,
-                "pre_create_hook": pre_create_hook,
-            }
-            if hasattr(self.endpoint, "_delay_options"):
-                delay_opts |= self.endpoint._delay_options
-            delay_opts |= options
+        def delay_options(self, **options: Unpack[AsyncDelayOptions]) -> AsyncDelayer:
+            opts: AsyncDelayOptions = {}
+            endpoint_defaults = getattr(self.endpoint, "_delay_options", None)
+            if endpoint_defaults:
+                opts.update(endpoint_defaults)
+            opts.update(options)
 
             # A per-call client override gets its own one-off provider
-            if "client" in delay_opts:
-                delay_opts["client_provider"] = AsyncCloudTasksClientProvider(
-                    client=delay_opts.pop("client"),  # type: ignore[arg-type]
+            provider = client_provider
+            if "client" in opts:
+                provider = AsyncCloudTasksClientProvider(
+                    client=opts["client"],
                     auto_create_queue=auto_create_queue,
                 )
 
-            # ignoring the type here because the dictionary values are unpacked
             return AsyncDelayer(
                 route=self,
-                **delay_opts,  # type: ignore[arg-type]
+                base_url=opts.get("base_url", base_url),
+                queue_path=opts.get("queue_path", queue_path),
+                task_create_timeout=opts.get("task_create_timeout", task_create_timeout),
+                client_provider=provider,
+                pre_create_hook=opts.get("pre_create_hook", hook),
+                countdown=opts.get("countdown", 0),
+                task_id=opts.get("task_id"),
             )
 
         async def delay(self, **kwargs: Any) -> tasks_v2.Task:

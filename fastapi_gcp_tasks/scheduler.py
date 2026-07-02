@@ -1,5 +1,6 @@
 # Standard Library Imports
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 # Third Party Imports
 from fastapi.routing import APIRoute

@@ -8,7 +8,7 @@ from fastapi.routing import APIRouter
 from pydantic import BaseModel
 
 # Imports from this repository
-from fastapi_gcp_tasks import DelayedRouteBuilder
+from fastapi_gcp_tasks import DelayedRouteBuilder, as_delayed_task
 from fastapi_gcp_tasks.utils import emulator_client, queue_path
 
 # set env var IS_LOCAL=false for your deployment environment
@@ -44,9 +44,10 @@ class Payload(BaseModel):
 
 
 @delayed_router.post("/hello")
+@as_delayed_task
 async def hello(
     p: Payload = Payload(message="Default"),
-):
+) -> None:
     logger.warning(f"Hello task ran with payload: {p.message}")
 
 
@@ -54,7 +55,7 @@ app = FastAPI()
 
 
 @app.get("/trigger")
-async def trigger():
+async def trigger() -> dict[str, str]:
     hello.delay(p=Payload(message="Triggered task"))
     return {"message": "Basic hello task triggered"}
 

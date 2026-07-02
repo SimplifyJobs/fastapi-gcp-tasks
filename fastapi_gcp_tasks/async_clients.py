@@ -1,6 +1,7 @@
 # Standard Library Imports
 import asyncio
-from typing import Callable, Generic, TypeVar
+from collections.abc import Callable
+from typing import Generic, TypeVar
 
 ClientT = TypeVar("ClientT")
 
