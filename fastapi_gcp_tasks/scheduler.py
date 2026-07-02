@@ -107,7 +107,7 @@ class BaseScheduler(Requester):
         job.status = None
         job.last_attempt_time = None  # type: ignore[assignment]
         job.schedule_time = None  # type: ignore[assignment]
-        del job.http_target.headers["User-Agent"]
+        job.http_target.headers.pop("User-Agent", None)
         # Proto compare works directly with `__eq__`
         return job != request.job
 

@@ -186,6 +186,13 @@ class TestAsyncCloudTasksClientProvider:
         with pytest.raises(TypeError, match="CloudTasksAsyncClient"):
             await provider.get()
 
+    async def test_factory_returning_wrong_type_raises_clear_error(self) -> None:
+        """A factory that returns the wrong type should fail with a descriptive TypeError."""
+        provider = AsyncCloudTasksClientProvider(client=lambda: None, queue_path=QUEUE_PATH)  # type: ignore[arg-type,return-value]
+
+        with pytest.raises(TypeError, match="factory must return a CloudTasksAsyncClient"):
+            await provider.get()
+
 
 class TestAsyncDelayedRouteBuilder:
     """Tests for the route builder wiring."""

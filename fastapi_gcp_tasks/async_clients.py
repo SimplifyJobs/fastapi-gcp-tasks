@@ -42,7 +42,12 @@ class AsyncClientProvider(Generic[ClientT]):
         if isinstance(client, self._client_cls):
             return client
         if callable(client):
-            return client()
+            resolved = client()
+            if not isinstance(resolved, self._client_cls):
+                raise TypeError(
+                    f"client factory must return a {self._client_cls.__name__}; got {type(resolved).__name__}"
+                )
+            return resolved
         raise TypeError(
             f"client must be a {self._client_cls.__name__}, a zero-argument factory returning one, or None; "
             f"got {type(client).__name__}"

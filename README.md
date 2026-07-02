@@ -147,6 +147,8 @@ creating Cloud Scheduler jobs dynamically from request handlers. Since it can't 
 time like the sync version, await it from a lifespan (or a handler):
 
 ```python
+from contextlib import asynccontextmanager
+
 from fastapi_gcp_tasks import AsyncScheduledRouteBuilder
 
 async_scheduled_router = APIRouter(route_class=AsyncScheduledRouteBuilder(...))
@@ -178,6 +180,8 @@ Things to know about the async builders:
   the first `.delay()`:
 
   ```python
+  from contextlib import asynccontextmanager
+
   from fastapi_gcp_tasks.utils import ensure_queue_async
 
 

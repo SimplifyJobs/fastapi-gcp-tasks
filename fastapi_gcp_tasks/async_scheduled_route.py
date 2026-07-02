@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Callable, Type
+from typing import Any, Callable, Type
 
 # Third Party Imports
 from fastapi.routing import APIRoute
@@ -61,7 +61,7 @@ def AsyncScheduledRouteBuilder(  # noqa: N802
             self.endpoint.scheduler = self.scheduler_options  # type: ignore[attr-defined]
             return original_route_handler
 
-        def scheduler_options(self, *, name: str, schedule: str, **options: dict) -> AsyncScheduler:
+        def scheduler_options(self, *, name: str, schedule: str, **options: Any) -> AsyncScheduler:
             scheduler_opts = {
                 "base_url": base_url,
                 "location_path": location_path,
