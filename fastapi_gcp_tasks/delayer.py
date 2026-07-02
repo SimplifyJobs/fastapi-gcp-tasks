@@ -86,7 +86,7 @@ class Delayer(Requester):
         return timestamp
 
 
-def _task_method(methods: Iterable[str]) -> tasks_v2.HttpMethod:
+def _task_method(methods: Iterable[str] | None) -> tasks_v2.HttpMethod:
     method_map = {
         "POST": tasks_v2.HttpMethod.POST,
         "GET": tasks_v2.HttpMethod.GET,
@@ -96,8 +96,10 @@ def _task_method(methods: Iterable[str]) -> tasks_v2.HttpMethod:
         "PATCH": tasks_v2.HttpMethod.PATCH,
         "OPTIONS": tasks_v2.HttpMethod.OPTIONS,
     }
-    methods = list(methods)
+    methods = list(methods or [])
     # Only crash if we're being bound
+    if not methods:
+        raise BadMethodError("Can't trigger task without a method")
     if len(methods) > 1:
         raise BadMethodError("Can't trigger task with multiple methods")
     method = method_map.get(methods[0])
