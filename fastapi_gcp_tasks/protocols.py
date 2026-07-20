@@ -23,6 +23,7 @@ class TaskDefaultOptions(TypedDict, total=False):
     countdown: int
     task_id: str
     task_create_timeout: float
+    callback_base_url: str
     base_url: str
     queue_path: str
     pre_create_hook: DelayedTaskHook
@@ -43,6 +44,7 @@ class AsyncDelayOptions(TaskDefaultOptions, total=False):
 class SchedulerOptions(TypedDict, total=False):
     """Per-call overrides accepted by ``.scheduler()`` on a scheduled task endpoint."""
 
+    callback_base_url: str
     base_url: str
     location_path: str
     job_create_timeout: float
@@ -56,6 +58,7 @@ class SchedulerOptions(TypedDict, total=False):
 class AsyncSchedulerOptions(TypedDict, total=False):
     """Per-call overrides accepted by ``.scheduler()`` on an async scheduled task endpoint."""
 
+    callback_base_url: str
     base_url: str
     location_path: str
     job_create_timeout: float

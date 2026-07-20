@@ -47,7 +47,7 @@ if IS_LOCAL:
 
 DelayedRoute = DelayedRouteBuilder(
     client=delayed_client,
-    base_url=TASK_LISTENER_BASE_URL,
+    callback_base_url=TASK_LISTENER_BASE_URL,
     queue_path=TASK_QUEUE_PATH,
     # Chain multiple hooks together
     pre_create_hook=chained_hook(
@@ -72,7 +72,7 @@ if IS_LOCAL:
 
 ScheduledRoute = ScheduledRouteBuilder(
     client=scheduled_client,
-    base_url=TASK_LISTENER_BASE_URL,
+    callback_base_url=TASK_LISTENER_BASE_URL,
     location_path=SCHEDULED_LOCATION_PATH,
     pre_create_hook=chained_hook(
         # Add service account for cloud run
@@ -93,7 +93,7 @@ def _local_async_delayed_client() -> tasks_v2.CloudTasksAsyncClient:
 
 AsyncDelayedRoute = AsyncDelayedRouteBuilder(
     client=_local_async_delayed_client if IS_LOCAL else None,
-    base_url=TASK_LISTENER_BASE_URL,
+    callback_base_url=TASK_LISTENER_BASE_URL,
     queue_path=TASK_QUEUE_PATH,
     auto_create_queue=True,
     pre_create_hook=chained_hook(

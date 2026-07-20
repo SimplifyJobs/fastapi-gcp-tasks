@@ -1,13 +1,12 @@
 # Standard Library Imports
-from collections.abc import Callable, Coroutine
 from typing import Any, Unpack
 
 # Third Party Imports
-from fastapi import Request, Response
 from fastapi.routing import APIRoute
 from google.cloud import tasks_v2
 
 # Imports from this repository
+from fastapi_gcp_tasks._callback_url import resolve_callback_base_url
 from fastapi_gcp_tasks.delayer import Delayer
 from fastapi_gcp_tasks.hooks import DelayedTaskHook, noop_hook
 from fastapi_gcp_tasks.protocols import DelayOptions, ensure_known_options
@@ -16,8 +15,9 @@ from fastapi_gcp_tasks.utils import ensure_queue
 
 def DelayedRouteBuilder(  # noqa: N802
     *,
-    base_url: str,
     queue_path: str,
+    callback_base_url: str | None = None,
+    base_url: str | None = None,
     task_create_timeout: float = 10.0,
     pre_create_hook: DelayedTaskHook | None = None,
     client: tasks_v2.CloudTasksClient | None = None,
@@ -27,6 +27,10 @@ def DelayedRouteBuilder(  # noqa: N802
     Returns a Mixin that should be used to override route_class.
 
     It adds a .delay and .options methods to the original endpoint.
+
+    ``callback_base_url`` is the externally reachable URL prefix to which the
+    route's own path is appended. It should include prefixes added by an outer
+    ``include_router`` call. ``base_url`` is retained as a legacy alias.
 
     Example:
     -------
@@ -49,6 +53,10 @@ def DelayedRouteBuilder(  # noqa: N802
     ```
 
     """
+    resolved_callback_base_url = resolve_callback_base_url(
+        callback_base_url=callback_base_url,
+        base_url=base_url,
+    )
     task_client = client if client is not None else tasks_v2.CloudTasksClient()
     hook: DelayedTaskHook = pre_create_hook if pre_create_hook is not None else noop_hook
 
@@ -56,11 +64,15 @@ def DelayedRouteBuilder(  # noqa: N802
         ensure_queue(client=task_client, path=queue_path)
 
     class TaskRouteMixin(APIRoute):
-        def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
-            original_route_handler = super().get_route_handler()
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            existing_delay = getattr(self.endpoint, "delay", None)
+            # FastAPI <0.137 clones routes during inclusion. Keep the endpoint
+            # bound to its original route so callback prefixing stays explicit.
+            if isinstance(getattr(existing_delay, "__self__", None), TaskRouteMixin):
+                return
             self.endpoint.options = self.delay_options  # type: ignore[attr-defined]
             self.endpoint.delay = self.delay  # type: ignore[attr-defined]
-            return original_route_handler
 
         def delay_options(self, **options: Unpack[DelayOptions]) -> Delayer:
             ensure_known_options(options, DelayOptions)
@@ -81,7 +93,11 @@ def DelayedRouteBuilder(  # noqa: N802
 
             return Delayer(
                 route=self,
-                base_url=opts.get("base_url", base_url),
+                base_url=resolve_callback_base_url(
+                    callback_base_url=opts.get("callback_base_url"),
+                    base_url=opts.get("base_url"),
+                    default=resolved_callback_base_url,
+                ),
                 queue_path=opts.get("queue_path", queue_path),
                 task_create_timeout=opts.get("task_create_timeout", task_create_timeout),
                 client=resolved_client,

@@ -1,13 +1,12 @@
 # Standard Library Imports
-from collections.abc import Callable, Coroutine
 from typing import Any, Unpack
 
 # Third Party Imports
-from fastapi import Request, Response
 from fastapi.routing import APIRoute
 from google.cloud import scheduler_v1
 
 # Imports from this repository
+from fastapi_gcp_tasks._callback_url import resolve_callback_base_url
 from fastapi_gcp_tasks.hooks import ScheduledHook, noop_hook
 from fastapi_gcp_tasks.protocols import SchedulerOptions, ensure_known_options
 from fastapi_gcp_tasks.scheduler import Scheduler
@@ -15,8 +14,9 @@ from fastapi_gcp_tasks.scheduler import Scheduler
 
 def ScheduledRouteBuilder(  # noqa: N802
     *,
-    base_url: str,
     location_path: str,
+    callback_base_url: str | None = None,
+    base_url: str | None = None,
     job_create_timeout: float = 10.0,
     pre_create_hook: ScheduledHook | None = None,
     client: scheduler_v1.CloudSchedulerClient | None = None,
@@ -25,6 +25,10 @@ def ScheduledRouteBuilder(  # noqa: N802
     Returns a Mixin that should be used to override route_class.
 
     It adds a .scheduler method to the original endpoint.
+
+    ``callback_base_url`` is the externally reachable URL prefix to which the
+    route's own path is appended. It should include prefixes added by an outer
+    ``include_router`` call. ``base_url`` is retained as a legacy alias.
 
     Example:
     -------
@@ -42,14 +46,22 @@ def ScheduledRouteBuilder(  # noqa: N802
     ```
 
     """
+    resolved_callback_base_url = resolve_callback_base_url(
+        callback_base_url=callback_base_url,
+        base_url=base_url,
+    )
     scheduler_client = client if client is not None else scheduler_v1.CloudSchedulerClient()
     hook: ScheduledHook = pre_create_hook if pre_create_hook is not None else noop_hook
 
     class ScheduledRouteMixin(APIRoute):
-        def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
-            original_route_handler = super().get_route_handler()
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            existing_scheduler = getattr(self.endpoint, "scheduler", None)
+            # FastAPI <0.137 clones routes during inclusion. Keep the endpoint
+            # bound to its original route so callback prefixing stays explicit.
+            if isinstance(getattr(existing_scheduler, "__self__", None), ScheduledRouteMixin):
+                return
             self.endpoint.scheduler = self.scheduler_options  # type: ignore[attr-defined]
-            return original_route_handler
 
         def scheduler_options(self, *, name: str, schedule: str, **options: Unpack[SchedulerOptions]) -> Scheduler:
             ensure_known_options(options, SchedulerOptions)
@@ -65,7 +77,11 @@ def ScheduledRouteBuilder(  # noqa: N802
 
             return Scheduler(
                 route=self,
-                base_url=options.get("base_url", base_url),
+                base_url=resolve_callback_base_url(
+                    callback_base_url=options.get("callback_base_url"),
+                    base_url=options.get("base_url"),
+                    default=resolved_callback_base_url,
+                ),
                 location_path=options.get("location_path", location_path),
                 schedule=schedule,
                 client=resolved_client,
