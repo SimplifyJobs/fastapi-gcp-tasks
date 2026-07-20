@@ -284,7 +284,7 @@ if IS_LOCAL:
 # This can be done once across the entire project
 DelayedRoute = DelayedRouteBuilder(
     client=client,
-    base_url="http://localhost:8000"
+    callback_base_url="http://localhost:8000",
     queue_path=queue_path(
         project="gcp-project-id",
         location="us-central1",
@@ -333,17 +333,17 @@ Pre-requisites:
 
 ```python
 # URL of the Cloud Run service
-base_url = "https://hello-randomchars-el.a.run.app"
+service_url = "https://hello-randomchars-el.a.run.app"
 
 DelayedRoute = DelayedRouteBuilder(
-    base_url=base_url,
+    callback_base_url=service_url,
     # Task queue, same as above.
     queue_path=queue_path(...),
     pre_create_hook=oidc_task_hook(
         token=tasks_v2.OidcToken(
             # Service account that you created
             service_account_email="fastapi-gcp-tasks@gcp-project-id.iam.gserviceaccount.com",
-            audience=base_url,
+            audience=service_url,
         ),
     ),
 )
@@ -370,7 +370,10 @@ def simple_task():
     return {}
 ```
 
-- `base_url` - The URL of your worker FastAPI service.
+- `callback_base_url` - The externally reachable URL prefix to which the task route's own path is appended.
+  Include any prefix added later by an outer `include_router()` call.
+
+- `base_url` - Legacy alias for `callback_base_url`. Pass only one of the two.
 
 - `queue_path` - Full path of the Cloud Tasks queue. (Hint: use the util function `queue_path`)
 
@@ -416,7 +419,8 @@ Usage:
 simple_task.options(...).delay()
 ```
 
-All options from above can be overwritten per call (including DelayedRouteBuilder options like `base_url`) with kwargs to the `options` function before calling delay.
+All options from above can be overwritten per call (including `callback_base_url`) with kwargs to the `options`
+function before calling delay.
 
 Example:
 
@@ -424,6 +428,38 @@ Example:
 # Trigger after 2 minutes
 simple_task.options(countdown=120).delay()
 ```
+
+#### Routers mounted under an outer prefix
+
+FastAPI 0.137 and later preserve included routers instead of cloning their routes. A route class therefore knows the
+path declared on its own router, but it cannot unambiguously infer a prefix added later—especially because the same
+router can be included more than once. Put that externally visible prefix in `callback_base_url`:
+
+```python
+service_url = "https://worker.example.com"
+
+DelayedRoute = DelayedRouteBuilder(
+    callback_base_url=f"{service_url}/tasks",
+    queue_path=queue_path(...),
+    pre_create_hook=oidc_delayed_hook(
+        token=tasks_v2.OidcToken(
+            service_account_email="tasks@example.iam.gserviceaccount.com",
+            audience=service_url,
+        ),
+    ),
+)
+
+task_router = APIRouter(route_class=DelayedRoute, prefix="/auth")
+
+@task_router.post("/confirm/{user_id}")
+def confirm_user(user_id: str): ...
+
+app.include_router(task_router, prefix="/tasks")
+```
+
+`confirm_user.delay(user_id="42")` now targets
+`https://worker.example.com/tasks/auth/confirm/42`. The OIDC audience remains the service URL; it does not need the
+callback path prefix.
 
 ### AsyncDelayedRouteBuilder
 
@@ -433,6 +469,8 @@ Same options as `DelayedRouteBuilder`, with two differences:
   the first awaited `.delay()` because grpc.aio clients bind to the running event loop.
 - `auto_create_queue` - Defaults to `False` (the sync builder defaults to `True`). When `True`, the queue is
   ensured lazily on the first `.delay()`. Prefer calling `ensure_queue_async` from your lifespan instead.
+
+The same `callback_base_url` rule applies when an async delayed router is mounted under an outer prefix.
 
 ### ScheduledRouteBuilder
 
@@ -450,11 +488,34 @@ def simple_scheduled_task():
 simple_scheduled_task.scheduler(name="simple_scheduled_task", schedule="* * * * *").schedule()
 ```
 
+`callback_base_url` has the same meaning as it does for delayed routes: it is the externally reachable URL prefix to
+which the scheduled route's own path is appended. Include prefixes added by an outer `include_router()` call:
+
+```python
+service_url = "https://worker.example.com"
+
+ScheduledRoute = ScheduledRouteBuilder(
+    callback_base_url=f"{service_url}/tasks",
+    location_path="projects/my-project/locations/us-central1",
+)
+scheduled_router = APIRouter(route_class=ScheduledRoute, prefix="/maintenance")
+
+@scheduled_router.post("/sweep")
+def sweep(): ...
+
+app.include_router(scheduled_router, prefix="/tasks")
+```
+
+The scheduled callback is `https://worker.example.com/tasks/maintenance/sweep`. As with delayed tasks, keep a Cloud
+Run OIDC audience set to `service_url`, without the callback path prefix. `base_url` remains a legacy alias for
+`callback_base_url`; pass only one.
+
 ### AsyncScheduledRouteBuilder
 
 Same options as `ScheduledRouteBuilder`, except `client` accepts a `CloudSchedulerAsyncClient`, a
 zero-argument factory returning one, or `None` (resolved lazily, as above). `.schedule()` and `.delete()`
-are coroutines — await them from a lifespan or a request handler.
+are coroutines — await them from a lifespan or a request handler. The same nested-router `callback_base_url` rule
+applies to async scheduled routes.
 
 
 ## Hooks

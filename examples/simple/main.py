@@ -21,8 +21,8 @@ if IS_LOCAL:
 
 DelayedRoute = DelayedRouteBuilder(
     client=client,
-    # Base URL where the task server will get hosted
-    base_url=os.getenv("TASK_LISTENER_BASE_URL", default="http://localhost:8000"),
+    # Externally reachable URL prefix where the task routes are hosted
+    callback_base_url=os.getenv("TASK_LISTENER_BASE_URL", default="http://localhost:8000"),
     # Full queue path to which we'll send tasks.
     # Edit values below to match your project
     queue_path=queue_path(

@@ -1,13 +1,13 @@
 # Standard Library Imports
-from collections.abc import Callable, Coroutine
 from typing import Any, Unpack
 
 # Third Party Imports
-from fastapi import Request, Response
 from fastapi.routing import APIRoute
 from google.cloud import tasks_v2
 
 # Imports from this repository
+from fastapi_gcp_tasks._callback_url import resolve_callback_base_url
+from fastapi_gcp_tasks._endpoint_binding import bind_endpoint_methods
 from fastapi_gcp_tasks.async_delayer import (
     AsyncCloudTasksClientFactory,
     AsyncCloudTasksClientProvider,
@@ -19,8 +19,9 @@ from fastapi_gcp_tasks.protocols import AsyncDelayOptions, ensure_known_options
 
 def AsyncDelayedRouteBuilder(  # noqa: N802
     *,
-    base_url: str,
     queue_path: str,
+    callback_base_url: str | None = None,
+    base_url: str | None = None,
     task_create_timeout: float = 10.0,
     pre_create_hook: DelayedTaskHook | None = None,
     client: tasks_v2.CloudTasksAsyncClient | AsyncCloudTasksClientFactory | None = None,
@@ -30,6 +31,10 @@ def AsyncDelayedRouteBuilder(  # noqa: N802
     Returns a Mixin that should be used to override route_class, with an awaitable .delay.
 
     It adds awaitable .delay and sync .options methods to the original endpoint.
+
+    ``callback_base_url`` is the externally reachable URL prefix to which the
+    route's own path is appended. It should include prefixes added by an outer
+    ``include_router`` call. ``base_url`` is retained as a legacy alias.
 
     ``client`` may be a CloudTasksAsyncClient, a zero-argument factory returning one,
     or None (default client). grpc.aio channels bind to the event loop active at
@@ -64,16 +69,22 @@ def AsyncDelayedRouteBuilder(  # noqa: N802
     ```
 
     """
+    resolved_callback_base_url = resolve_callback_base_url(
+        callback_base_url=callback_base_url,
+        base_url=base_url,
+    )
     hook: DelayedTaskHook = pre_create_hook if pre_create_hook is not None else noop_hook
 
     client_provider = AsyncCloudTasksClientProvider(client=client, auto_create_queue=auto_create_queue)
 
     class AsyncTaskRouteMixin(APIRoute):
-        def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
-            original_route_handler = super().get_route_handler()
-            self.endpoint.options = self.delay_options  # type: ignore[attr-defined]
-            self.endpoint.delay = self.delay  # type: ignore[attr-defined]
-            return original_route_handler
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            bind_endpoint_methods(
+                self,
+                primary_method_name="delay",
+                methods={"options": self.delay_options, "delay": self.delay},
+            )
 
         def delay_options(self, **options: Unpack[AsyncDelayOptions]) -> AsyncDelayer:
             ensure_known_options(options, AsyncDelayOptions)
@@ -93,7 +104,11 @@ def AsyncDelayedRouteBuilder(  # noqa: N802
 
             return AsyncDelayer(
                 route=self,
-                base_url=opts.get("base_url", base_url),
+                base_url=resolve_callback_base_url(
+                    callback_base_url=opts.get("callback_base_url"),
+                    base_url=opts.get("base_url"),
+                    default=resolved_callback_base_url,
+                ),
                 queue_path=opts.get("queue_path", queue_path),
                 task_create_timeout=opts.get("task_create_timeout", task_create_timeout),
                 client_provider=provider,
