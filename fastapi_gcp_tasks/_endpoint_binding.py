@@ -5,10 +5,22 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 # Third Party Imports
-from fastapi import __version__ as fastapi_version
 from fastapi.routing import APIRoute
 
-_FASTAPI_PRESERVES_ROUTER_TREES = tuple(int(part) for part in fastapi_version.split(".")[:2]) >= (0, 137)
+
+class _RouteInclusionMarker(dict[str, Any]):
+    """
+    Carry route identity through FastAPI's old inclusion clone path.
+
+    FastAPI through 0.136 forwards the exact ``openapi_extra`` object when
+    cloning a route. A dict subclass preserves every user-supplied OpenAPI
+    value while keeping ``origin`` as Python-only metadata that is never
+    emitted into the schema.
+    """
+
+    def __init__(self, *, origin: APIRoute, openapi_extra: dict[str, Any] | None) -> None:
+        super().__init__(openapi_extra or {})
+        self.origin = origin
 
 
 def bind_endpoint_methods(
@@ -22,6 +34,10 @@ def bind_endpoint_methods(
     if existing_method is None:
         for name, method in methods.items():
             setattr(route.endpoint, name, method)
+        route.openapi_extra = _RouteInclusionMarker(
+            origin=route,
+            openapi_extra=route.openapi_extra,
+        )
         return
 
     existing_route = getattr(existing_method, "__self__", None)
@@ -39,8 +55,10 @@ def bind_endpoint_methods(
 
 def _is_inclusion_clone(*, existing_route: object, route: APIRoute) -> bool:
     """Return whether ``route`` is a copy made by FastAPI's old ``include_router`` implementation."""
-    if not isinstance(existing_route, APIRoute) or type(existing_route) is not type(route):
-        return False
-    if route.path == existing_route.path:
-        return True
-    return not _FASTAPI_PRESERVES_ROUTER_TREES and route.path.endswith(existing_route.path)
+    marker = route.openapi_extra
+    return (
+        isinstance(existing_route, APIRoute)
+        and type(existing_route) is type(route)
+        and isinstance(marker, _RouteInclusionMarker)
+        and marker.origin is existing_route
+    )
