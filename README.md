@@ -470,6 +470,8 @@ Same options as `DelayedRouteBuilder`, with two differences:
 - `auto_create_queue` - Defaults to `False` (the sync builder defaults to `True`). When `True`, the queue is
   ensured lazily on the first `.delay()`. Prefer calling `ensure_queue_async` from your lifespan instead.
 
+The same `callback_base_url` rule applies when an async delayed router is mounted under an outer prefix.
+
 ### ScheduledRouteBuilder
 
 Usage:
@@ -486,11 +488,34 @@ def simple_scheduled_task():
 simple_scheduled_task.scheduler(name="simple_scheduled_task", schedule="* * * * *").schedule()
 ```
 
+`callback_base_url` has the same meaning as it does for delayed routes: it is the externally reachable URL prefix to
+which the scheduled route's own path is appended. Include prefixes added by an outer `include_router()` call:
+
+```python
+service_url = "https://worker.example.com"
+
+ScheduledRoute = ScheduledRouteBuilder(
+    callback_base_url=f"{service_url}/tasks",
+    location_path="projects/my-project/locations/us-central1",
+)
+scheduled_router = APIRouter(route_class=ScheduledRoute, prefix="/maintenance")
+
+@scheduled_router.post("/sweep")
+def sweep(): ...
+
+app.include_router(scheduled_router, prefix="/tasks")
+```
+
+The scheduled callback is `https://worker.example.com/tasks/maintenance/sweep`. As with delayed tasks, keep a Cloud
+Run OIDC audience set to `service_url`, without the callback path prefix. `base_url` remains a legacy alias for
+`callback_base_url`; pass only one.
+
 ### AsyncScheduledRouteBuilder
 
 Same options as `ScheduledRouteBuilder`, except `client` accepts a `CloudSchedulerAsyncClient`, a
 zero-argument factory returning one, or `None` (resolved lazily, as above). `.schedule()` and `.delete()`
-are coroutines — await them from a lifespan or a request handler.
+are coroutines — await them from a lifespan or a request handler. The same nested-router `callback_base_url` rule
+applies to async scheduled routes.
 
 
 ## Hooks

@@ -7,6 +7,7 @@ from google.cloud import scheduler_v1
 
 # Imports from this repository
 from fastapi_gcp_tasks._callback_url import resolve_callback_base_url
+from fastapi_gcp_tasks._endpoint_binding import bind_endpoint_methods
 from fastapi_gcp_tasks.async_clients import AsyncClientProvider
 from fastapi_gcp_tasks.async_scheduler import AsyncCloudSchedulerClientFactory, AsyncScheduler
 from fastapi_gcp_tasks.hooks import ScheduledHook, noop_hook
@@ -69,12 +70,11 @@ def AsyncScheduledRouteBuilder(  # noqa: N802
     class AsyncScheduledRouteMixin(APIRoute):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, **kwargs)
-            existing_scheduler = getattr(self.endpoint, "scheduler", None)
-            # FastAPI <0.137 clones routes during inclusion. Keep the endpoint
-            # bound to its original route so callback prefixing stays explicit.
-            if isinstance(getattr(existing_scheduler, "__self__", None), AsyncScheduledRouteMixin):
-                return
-            self.endpoint.scheduler = self.scheduler_options  # type: ignore[attr-defined]
+            bind_endpoint_methods(
+                self,
+                primary_method_name="scheduler",
+                methods={"scheduler": self.scheduler_options},
+            )
 
         def scheduler_options(
             self, *, name: str, schedule: str, **options: Unpack[AsyncSchedulerOptions]

@@ -7,6 +7,7 @@ from google.cloud import tasks_v2
 
 # Imports from this repository
 from fastapi_gcp_tasks._callback_url import resolve_callback_base_url
+from fastapi_gcp_tasks._endpoint_binding import bind_endpoint_methods
 from fastapi_gcp_tasks.async_delayer import (
     AsyncCloudTasksClientFactory,
     AsyncCloudTasksClientProvider,
@@ -79,13 +80,11 @@ def AsyncDelayedRouteBuilder(  # noqa: N802
     class AsyncTaskRouteMixin(APIRoute):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, **kwargs)
-            existing_delay = getattr(self.endpoint, "delay", None)
-            # FastAPI <0.137 clones routes during inclusion. Keep the endpoint
-            # bound to its original route so callback prefixing stays explicit.
-            if isinstance(getattr(existing_delay, "__self__", None), AsyncTaskRouteMixin):
-                return
-            self.endpoint.options = self.delay_options  # type: ignore[attr-defined]
-            self.endpoint.delay = self.delay  # type: ignore[attr-defined]
+            bind_endpoint_methods(
+                self,
+                primary_method_name="delay",
+                methods={"options": self.delay_options, "delay": self.delay},
+            )
 
         def delay_options(self, **options: Unpack[AsyncDelayOptions]) -> AsyncDelayer:
             ensure_known_options(options, AsyncDelayOptions)
