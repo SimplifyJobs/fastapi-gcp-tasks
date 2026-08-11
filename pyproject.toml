@@ -1,15 +1,15 @@
 [project]
 name = "fastapi-gcp-tasks"
-version = "0.3.1"
+version = "0.3.2"
 description = "Trigger delayed Cloud Tasks from FastAPI"
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "Team Simplify", email = "oss@simplify.jobs" }]
 requires-python = ">=3.11,<3.15"
 dependencies = [
-    "google-cloud-tasks>=2.21.0,<2.24.0",
-    "google-cloud-scheduler>=2.13.3,<2.21.0",
-    "fastapi>=0.110.0,<0.142.0",
+    "google-cloud-tasks>=2.21.0,<2.25.0",
+    "google-cloud-scheduler>=2.13.3,<2.22.0",
+    "fastapi>=0.110.0,<0.143.0",
 ]
 
 [dependency-groups]

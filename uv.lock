@@ -364,7 +364,7 @@ wheels = [
 
 [[package]]
 name = "fastapi-gcp-tasks"
-version = "0.3.1"
+version = "0.3.2"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
@@ -392,9 +392,9 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastapi", specifier = ">=0.110.0,<0.142.0" },
-    { name = "google-cloud-scheduler", specifier = ">=2.13.3,<2.21.0" },
-    { name = "google-cloud-tasks", specifier = ">=2.21.0,<2.24.0" },
+    { name = "fastapi", specifier = ">=0.110.0,<0.143.0" },
+    { name = "google-cloud-scheduler", specifier = ">=2.13.3,<2.22.0" },
+    { name = "google-cloud-tasks", specifier = ">=2.21.0,<2.25.0" },
 ]
 
 [package.metadata.requires-dev]
