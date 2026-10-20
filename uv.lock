@@ -485,7 +485,7 @@ wheels = [
 
 [[package]]
 name = "fastapi-gcp-tasks"
-version = "0.3.3"
+version = "0.3.4"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
