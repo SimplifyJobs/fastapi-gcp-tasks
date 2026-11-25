@@ -68,8 +68,9 @@ A few rules keep mistakes at the call site instead of on the worker:
 - **Arguments you leave out fall back to the endpoint's default.** A `None` default is not sent at all; any
   other default is sent explicitly. For a body parameter that accepts `None`, passing `None` sends JSON `null`,
   which is different from leaving it out.
-- **An empty list cannot be expressed in a query string or header.** Passing one raises `ValueError`, unless
-  the endpoint's own default is also empty, in which case the key is simply left out.
+- **An empty list cannot be expressed in a query string, header or cookie.** Passing one raises `ValueError`,
+  unless the endpoint's own default is also empty, in which case the key is simply left out. The same applies
+  to list fields of a parameter model. A cookie cannot carry a list at all, since it holds a single value.
 - **Unknown arguments raise `TypeError`**, as they would in a normal function call. So does a value for an
   argument the worker resolves itself, such as `db: Session = Depends(get_db)`.
 - **Values are validated** against the endpoint's annotations before the task is created. A missing required

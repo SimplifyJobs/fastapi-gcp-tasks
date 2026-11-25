@@ -27,12 +27,13 @@ These can require action when upgrading:
   "the job changed", which deleted and recreated the job on a guess. Only "not found" means the job is missing,
   and a missing job is created without a delete, so first-time scheduling needs no permission to delete jobs.
 - **Collections that cannot be delivered raise `ValueError`.** That covers a list header with more than one value
-  (a task request sends each header once) and an empty list for a query or header parameter whose default is not
-  also empty.
+  (a task request sends each header once), any list passed to a cookie parameter, and an empty list for a query,
+  header or cookie parameter whose default is not also empty.
 - **Cookie parameters are sent in the standard `Cookie` header.** They used to be sent in a `Cookies` header that
   FastAPI does not read.
-- **Some scheduled jobs are recreated once after upgrading.** Omitted optional query parameters are no longer in
-  the URL, so `.schedule()` sees a job that relied on them as changed the first time.
+- **Some scheduled jobs are recreated once after upgrading.** `.schedule()` sees a job as changed the first time
+  if its request is now built differently: omitted optional query parameters (no longer in the URL), list, enum
+  and boolean query values, cookie parameters (now in `Cookie`), and path values that need percent-encoding.
 
 ### Fixed
 

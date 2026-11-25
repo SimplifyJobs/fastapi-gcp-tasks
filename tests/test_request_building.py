@@ -265,6 +265,13 @@ def required_nullable_body(item: Item, note: Annotated[str | None, Body()]) -> d
     return {"item": item.name, "note": note}
 
 
+@router.post("/list_cookie")
+@as_delayed_task
+def list_cookie(tags: Annotated[list[str], Cookie(default_factory=list)]) -> dict[str, Any]:
+    """Echo a list-valued cookie (which FastAPI can never actually read from a request)."""
+    return {"tags": tags}
+
+
 @router.post("/stripped")
 @as_delayed_task
 def stripped(note: Annotated[str, BeforeValidator(lambda text: text.strip()), Body(embed=True)]) -> dict[str, Any]:
@@ -715,6 +722,11 @@ class TestCollections:
         """A one-item list fits in the single header occurrence a task can send."""
         http = _http(list_header.delay(x_ids=[7]))
         assert _replay(http) == (200, {"x_ids": [7]})
+
+    def test_list_cookie_is_rejected(self) -> None:
+        """A cookie holds one string, which FastAPI never validates as a list, so fail at the call site."""
+        with pytest.raises(ValueError, match="tags"):
+            list_cookie.delay(tags=["chili"])
 
     def test_multi_value_list_header_is_rejected(self) -> None:
         """FastAPI does not split a comma-separated header back into a list, so fail at the call site."""

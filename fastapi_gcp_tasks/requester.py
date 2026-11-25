@@ -160,12 +160,14 @@ class Requester:
             if value is None:
                 continue
             pairs = _expand_model(param, value, location="cookie") if param.is_model else [(param.wire, value)]
-            # Quote like the stdlib does, so a ";" or "," in a value cannot end it early
-            cookies.extend(
-                f"{key}={_COOKIES.value_encode(_to_wire(item))[1]}"
-                for key, item in pairs
-                if not (isinstance(item, _COLLECTIONS) and not item)
-            )
+            for key, item in pairs:
+                if isinstance(item, _COLLECTIONS):
+                    if item:
+                        # FastAPI reads a cookie as one string, which never validates as a list
+                        raise ValueError(f"cookie {key!r} cannot carry a collection: a cookie holds a single value")
+                    continue
+                # Quote like the stdlib does, so a ";" or "," in a value cannot end it early
+                cookies.append(f"{key}={_COOKIES.value_encode(_to_wire(item))[1]}")
         if cookies:
             headers["Cookie"] = "; ".join(cookies)
 
