@@ -99,8 +99,9 @@ async and scheduled route builders.
 
 `callback_base_url` may carry its own query string, for example `https://worker.example.com/tasks?tenant=dm`.
 Those parameters are sent with every task. A task argument with the same name replaces them whenever it sends a
-value or is passed explicitly, including an explicit empty list. An argument you leave out whose default is
-`None` or empty sends nothing, so the callback URL's value stays in place.
+value, and also when you pass an explicit empty list. An argument that sends nothing leaves the callback URL's
+value in place: one you leave out whose default is `None` or empty, or one you pass as `None`, which always
+means "not provided" for a query parameter.
 
 ## AsyncDelayedRouteBuilder
 

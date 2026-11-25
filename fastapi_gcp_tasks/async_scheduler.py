@@ -10,7 +10,7 @@ from google.cloud import scheduler_v1
 # Imports from this repository
 from fastapi_gcp_tasks.async_clients import AsyncClientProvider
 from fastapi_gcp_tasks.hooks import ScheduledHook
-from fastapi_gcp_tasks.scheduler import BaseScheduler
+from fastapi_gcp_tasks.scheduler import _MAX_SCHEDULE_ATTEMPTS, BaseScheduler
 
 AsyncCloudSchedulerClientFactory = Callable[[], scheduler_v1.CloudSchedulerAsyncClient]
 
@@ -61,21 +61,29 @@ class AsyncScheduler(BaseScheduler):
         """Schedule a job on Cloud Scheduler without blocking the event loop. Takes the same arguments as the endpoint."""
         request = self._build_create_job_request(values=self._bind(args, kwargs))
 
-        if not self.force:
-            existing = await self._existing_job(request=request)
-            if existing is None:
-                # Nothing to replace, so no delete: first-time scheduling only needs
-                # permission to look up and create jobs.
-                if await self._create(request=request):
-                    return
-                # Another instance created the job between our lookup and our create
+        replace = self.force
+        for _ in range(_MAX_SCHEDULE_ATTEMPTS):
+            if not replace:
                 existing = await self._existing_job(request=request)
-            if existing is not None and not self._job_changed(job=existing, request=request):
-                return
+                if existing is None:
+                    # Nothing to replace, so no delete: first-time scheduling only needs
+                    # permission to look up and create jobs.
+                    if await self._create(request=request):
+                        return
+                    # Another instance created the job first: look at what it created
+                    continue
+                if not self._job_changed(job=existing, request=request):
+                    return
 
-        # Delete and create job
-        await self.delete()
-        await self._create(request=request)
+            # Delete and create job
+            await self.delete()
+            if await self._create(request=request):
+                return
+            # Another instance recreated the job between our delete and our create.
+            # Do not assume its job matches ours: compare on the next round.
+            replace = False
+
+        raise self._never_settled(request=request)
 
     async def _create(self, request: scheduler_v1.CreateJobRequest) -> bool:
         """Create the job. Returns False if another instance created it first."""

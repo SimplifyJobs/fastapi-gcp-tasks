@@ -54,8 +54,8 @@ These can require action when upgrading:
   Such parameters are still never required at the call site, because a hook or Cloud Tasks itself often supplies
   them.
 - Cookie values are quoted, so a `;` or `,` in a value no longer cuts it short.
-- `.schedule()` no longer fails when another instance creates the same job at the same moment. The instance that
-  loses the race compares its job with the one that was created and only replaces it if they differ.
+- `.schedule()` no longer fails when another instance creates or replaces the same job at the same moment. The
+  instance that loses the race compares its job with the one that won and only replaces it if they differ.
 - Passing `None` for a body parameter that accepts it sends JSON `null` instead of the parameter's default.
 
 ### Added

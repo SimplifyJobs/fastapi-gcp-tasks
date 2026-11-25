@@ -48,6 +48,10 @@ the endpoint's own arguments, which become the job's HTTP body/params under the
 recreates it when something changed, so it is safe to call at startup on every deploy and from multiple
 instances. Pass `force=True` to always recreate.
 
+If another instance creates or replaces the same job at the same moment, `.schedule()` compares its job with
+the one that won and replaces it only if they differ. It raises `AlreadyExists` if the job keeps being
+recreated with a different definition.
+
 ## Deleting a job
 
 ```python

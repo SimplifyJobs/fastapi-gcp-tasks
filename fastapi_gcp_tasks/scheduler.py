@@ -14,6 +14,9 @@ from fastapi_gcp_tasks.exception import BadMethodError
 from fastapi_gcp_tasks.hooks import ScheduledHook
 from fastapi_gcp_tasks.requester import Requester
 
+# How many times schedule() looks again after losing a create race to another instance
+_MAX_SCHEDULE_ATTEMPTS = 3
+
 
 class BaseScheduler(Requester):
     """
@@ -102,6 +105,14 @@ class BaseScheduler(Requester):
         return self.pre_create_hook(request)
 
     @staticmethod
+    def _never_settled(*, request: scheduler_v1.CreateJobRequest) -> AlreadyExists:
+        # google-api-core exceptions ship without annotations
+        return AlreadyExists(  # type: ignore[no-untyped-call]
+            f"Job {request.job.name} kept being recreated with a different definition by another process "
+            f"({_MAX_SCHEDULE_ATTEMPTS} attempts)"
+        )
+
+    @staticmethod
     def _job_changed(*, job: scheduler_v1.Job, request: scheduler_v1.CreateJobRequest) -> bool:
         """Compare an existing job against the job we want to create, ignoring output-only fields."""
         # Remove things that are either output only or GCP adds by default
@@ -166,21 +177,29 @@ class Scheduler(BaseScheduler):
         """Schedule a job on Cloud Scheduler. Takes the same arguments as the endpoint."""
         request = self._build_create_job_request(values=self._bind(args, kwargs))
 
-        if not self.force:
-            existing = self._existing_job(request=request)
-            if existing is None:
-                # Nothing to replace, so no delete: first-time scheduling only needs
-                # permission to look up and create jobs.
-                if self._create(request=request):
-                    return
-                # Another instance created the job between our lookup and our create
+        replace = self.force
+        for _ in range(_MAX_SCHEDULE_ATTEMPTS):
+            if not replace:
                 existing = self._existing_job(request=request)
-            if existing is not None and not self._job_changed(job=existing, request=request):
-                return
+                if existing is None:
+                    # Nothing to replace, so no delete: first-time scheduling only needs
+                    # permission to look up and create jobs.
+                    if self._create(request=request):
+                        return
+                    # Another instance created the job first: look at what it created
+                    continue
+                if not self._job_changed(job=existing, request=request):
+                    return
 
-        # Delete and create job
-        self.delete()
-        self._create(request=request)
+            # Delete and create job
+            self.delete()
+            if self._create(request=request):
+                return
+            # Another instance recreated the job between our delete and our create.
+            # Do not assume its job matches ours: compare on the next round.
+            replace = False
+
+        raise self._never_settled(request=request)
 
     def _create(self, request: scheduler_v1.CreateJobRequest) -> bool:
         """Create the job. Returns False if another instance created it first."""

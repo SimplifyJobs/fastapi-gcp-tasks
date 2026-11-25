@@ -99,6 +99,37 @@ class TestAsyncScheduler:
         client.create_job.assert_awaited_once()
         client.delete_job.assert_not_awaited()
 
+    async def test_losing_the_replace_race_to_a_different_job_replaces_it_again(self) -> None:
+        """The competing job is compared, not assumed to match, so a different one is replaced."""
+        client = _mock_async_client()
+        scheduler = _make_scheduler(client)
+        client.get_job = AsyncMock(
+            side_effect=[
+                scheduler_v1.Job(name=scheduler.job_id, schedule="0 0 * * *"),
+                scheduler_v1.Job(name=scheduler.job_id, schedule="0 12 * * *"),
+            ]
+        )
+        client.create_job = AsyncMock(side_effect=[AlreadyExists("recreated by another instance"), scheduler_v1.Job()])
+
+        await scheduler.schedule()
+
+        assert client.delete_job.await_count == 2
+        assert client.create_job.await_count == 2
+
+    async def test_a_job_that_never_settles_raises(self) -> None:
+        """If another process keeps winning with a different job, fail loudly instead of reporting success."""
+        client = _mock_async_client()
+        scheduler = _make_scheduler(client)
+        client.get_job = AsyncMock(
+            side_effect=lambda **_: scheduler_v1.Job(name=scheduler.job_id, schedule="0 0 * * *")
+        )
+        client.create_job = AsyncMock(side_effect=AlreadyExists("recreated by another instance"))
+
+        with pytest.raises(AlreadyExists, match="different definition"):
+            await scheduler.schedule()
+
+        assert client.create_job.await_count == 3
+
     async def test_schedule_skips_unchanged_job(self) -> None:
         """An identical existing job should not be recreated."""
         client = _mock_async_client()
