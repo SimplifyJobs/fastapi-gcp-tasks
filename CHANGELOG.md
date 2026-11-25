@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Releases before this file existed are described on the
 [GitHub releases page](https://github.com/SimplifyJobs/fastapi-gcp-tasks/releases).
 
+## 0.4.1
+
+### Fixed
+
+- `{x:float}` path segments keep every digit of the value. In 0.4.0, values with more than 20 decimal places
+  were rounded, and values below `1e-20` were sent as `0`. Values that 0.4.0 wrote correctly keep their spelling.
+- A fractional value for an `{n:int}` path segment raises `ValueError`. It used to be truncated.
+- A header parameter model can no longer add a second `Content-Type` header, or one that Cloud Tasks or Cloud
+  Scheduler sets. Setting such a field raises `TypeError`; a field that only the endpoint's default sets is left
+  out.
+- A body parameter typed with a generic alias sends an explicit `None` as JSON `null` when the alias or its
+  argument is nullable, such as `Maybe[str]` for `type Maybe[T] = T | None`.
+
 ## 0.4.0
 
 ### Changed

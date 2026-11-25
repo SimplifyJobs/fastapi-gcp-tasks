@@ -3,10 +3,11 @@ import inspect
 import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from decimal import Decimal
 from functools import lru_cache, partial
 from http.cookies import SimpleCookie
 from types import UnionType
-from typing import Annotated, Any, TypeAliasType, Union, get_args, get_origin
+from typing import Annotated, Any, TypeAliasType, TypeVar, Union, get_args, get_origin
 from urllib.parse import ParseResult, parse_qsl, quote, urlencode, urlparse, urlunparse
 
 # Third Party Imports
@@ -161,10 +162,12 @@ class Requester:
             value = _resolve(param, values, location="header")
             if value is None:
                 continue
-            pairs = (
-                _expand_model(param, value, location="header", header=True) if param.is_model else [(param.wire, value)]
-            )
             explicit = values.get(param.name) is not None
+            pairs = (
+                _expand_model(param, value, location="header", header=True, explicit=explicit)
+                if param.is_model
+                else [(param.wire, value)]
+            )
             for key, item in pairs:
                 header_value = _header_value(key, item, explicit=explicit)
                 if header_value is not None:
@@ -311,8 +314,10 @@ def _build_plan(route: APIRoute) -> _RoutePlan:
 
     path = tuple(_path_param(key, convertor, path_fields) for key, convertor in route.param_convertors.items())
 
-    # An argument name belongs to the endpoint's own parameter first: a dependency parameter
-    # that happens to share the name (in another location) is not what the caller means.
+    # An argument name belongs to the endpoint's own parameter first, then to a body parameter
+    # (the body is the caller's to supply, wherever it is declared). A dependency's query,
+    # header or cookie parameter that happens to share the name is not what the caller means,
+    # and the two could not always take the same value anyway.
     own_names = (
         {param.name for param in (*query, *all_headers, *cookies) if param.own}
         | {param.name for param in body}
@@ -380,12 +385,23 @@ def _path_segment(path_param: _PathParam, value: Any) -> str:
     """Return the text for a path segment, or raise if the route's own pattern would not match it."""
     convertor = path_param.convertor
     segment = _to_wire(value)
-    if isinstance(convertor, (IntegerConvertor, FloatConvertor)):
-        # Starlette's typed segments match one canonical form only (no sign, no exponent)
-        try:
-            segment = convertor.to_string(value)
-        except (AssertionError, TypeError, ValueError):
-            pass  # not representable: the pattern check below reports it
+    # A typed segment matches one canonical form only (no sign, no exponent), and the convertor
+    # itself knows how to write it. That includes convertors an application registered.
+    is_int = isinstance(value, int) and not isinstance(value, bool)
+    is_number = is_int or isinstance(value, (float, Decimal))
+    try:
+        if isinstance(convertor, IntegerConvertor):
+            if is_number and value == int(value):
+                # Only a whole number: to_string would truncate 1.5 to "1"
+                segment = convertor.to_string(int(value))
+        elif isinstance(convertor, FloatConvertor) and is_number:
+            number = float(value)
+            segment = convertor.to_string(number)
+            if type(convertor) is FloatConvertor and float(segment) != number:
+                # Starlette keeps 20 decimal places, which rounds small values
+                segment = _plain_float(number)
+    except (AssertionError, ArithmeticError, TypeError, ValueError):
+        pass  # not representable (negative, infinite, not a number): the pattern check below reports it
     if not path_param.pattern.fullmatch(segment):
         # ASGI servers decode %2F before routing, so percent-encoding cannot rescue a value
         # the segment does not match: the request would hit a 404 or a different route.
@@ -397,6 +413,12 @@ def _path_segment(path_param: _PathParam, value: Any) -> str:
             f"the route segment would not match it{hint}"
         )
     return segment
+
+
+def _plain_float(value: float) -> str:
+    """Write a float as the shortest text that parses back to the same value, without an exponent."""
+    text = format(Decimal(repr(value)), "f")
+    return text.rstrip("0").rstrip(".") if "." in text else text
 
 
 def _is_reserved_header(wire: str) -> bool:
@@ -423,23 +445,33 @@ def _is_param_model(field: Any) -> bool:
     return isinstance(annotation, type) and issubclass(annotation, BaseModel)
 
 
-def _accepts_none(annotation: Any) -> bool:
+def _accepts_none(annotation: Any, bindings: dict[Any, Any] | None = None) -> bool:
     """
     Whether a parameter annotated this way can hold None.
 
     Decided from the annotation alone: probing the field with None would run the
-    endpoint's own validators on a value the caller never passed.
+    endpoint's own validators on a value the caller never passed. ``bindings`` maps the
+    type parameters of a generic alias being expanded to the arguments it was given.
     """
+    if isinstance(annotation, TypeVar):
+        return bindings is not None and annotation in bindings and _accepts_none(bindings[annotation])
     if annotation is Any or annotation is object or annotation is None or annotation is type(None):
         return True
     if isinstance(annotation, TypeAliasType):
         # type MaybeStr = str | None
         return _accepts_none(annotation.__value__)
     origin = get_origin(annotation)
+    if isinstance(origin, TypeAliasType):
+        # Maybe[str] for type Maybe[T] = T | None, or Identity[str | None] for type Identity[T] = T
+        arguments = [
+            bindings[argument] if bindings and isinstance(argument, TypeVar) and argument in bindings else argument
+            for argument in get_args(annotation)
+        ]
+        return _accepts_none(origin.__value__, dict(zip(origin.__type_params__, arguments, strict=False)))
     if origin is Annotated:
-        return _accepts_none(get_args(annotation)[0])
+        return _accepts_none(get_args(annotation)[0], bindings)
     if origin in (Union, UnionType):
-        return any(_accepts_none(member) for member in get_args(annotation))
+        return any(_accepts_none(member, bindings) for member in get_args(annotation))
     return False
 
 
@@ -482,11 +514,29 @@ def _model_field_alias(info: Any, name: str) -> str:
     return alias
 
 
-def _expand_model(param: _Param, value: Any, *, location: str, header: bool = False) -> list[tuple[str, Any]]:
-    """Flatten a parameter model into its individual (wire name, value) params."""
+def _expand_model(
+    param: _Param, value: Any, *, location: str, header: bool = False, explicit: bool = True
+) -> list[tuple[str, Any]]:
+    """
+    Flatten a parameter model into its individual (wire name, value) params.
+
+    ``explicit`` says the caller passed the model, as opposed to it being the endpoint's default.
+    """
     convert_underscores = header and getattr(param.field.field_info, "convert_underscores", True)
     pairs: list[tuple[str, Any]] = []
     for name, info in type(value).model_fields.items():
+        key = _model_field_alias(info, name)
+        if convert_underscores and key == name:
+            key = key.replace("_", "-")
+        if header and _is_reserved_header(key):
+            # Declared so the worker can read it, never sent. Setting it is the caller's mistake,
+            # whatever the value; a field the endpoint's own default sets is not.
+            if explicit and name in value.model_fields_set:
+                raise TypeError(
+                    f"{param.name}.{name} cannot be sent when triggered as a task: the task request sets "
+                    f"the {key!r} header itself"
+                )
+            continue
         item = getattr(value, name)
         if item is None:
             continue
@@ -497,9 +547,6 @@ def _expand_model(param: _Param, value: Any, *, location: str, header: bool = Fa
             required=info.is_required(),
             get_default=partial(_model_field_default, info, value),
         )
-        key = _model_field_alias(info, name)
-        if convert_underscores and key == name:
-            key = key.replace("_", "-")
         pairs.append((key, item))
     return pairs
 
