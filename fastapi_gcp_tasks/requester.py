@@ -1,11 +1,12 @@
 # Standard Library Imports
 import inspect
+import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from functools import lru_cache, partial
 from http.cookies import SimpleCookie
 from types import UnionType
-from typing import Annotated, Any, Union, get_args, get_origin
+from typing import Annotated, Any, TypeAliasType, Union, get_args, get_origin
 from urllib.parse import ParseResult, parse_qsl, quote, urlencode, urlparse, urlunparse
 
 # Third Party Imports
@@ -13,8 +14,9 @@ from fastapi import params
 from fastapi.dependencies.models import Dependant
 from fastapi.encoders import jsonable_encoder
 from fastapi.routing import APIRoute
-from pydantic import BaseModel
-from starlette.convertors import PathConvertor
+from pydantic import AliasChoices, BaseModel, SecretBytes, SecretStr
+from pydantic_core import to_jsonable_python
+from starlette.convertors import FloatConvertor, IntegerConvertor, StringConvertor
 
 # Imports from this repository
 from fastapi_gcp_tasks.exception import MissingParamError, WrongTypeError
@@ -29,6 +31,8 @@ except ImportError:
 # Headers that Cloud Tasks / Cloud Scheduler set themselves on every dispatch.
 # Endpoints may declare them to read them, but we must never send them.
 _RESERVED_HEADER_PREFIXES = ("x-cloudtasks-", "x-cloudscheduler")
+# The body is always JSON, so the request's content type is not a task argument either
+_RESERVED_HEADERS = ("content-type",)
 
 _COLLECTIONS = (list, tuple, set, frozenset)
 _MISSING: Any = object()
@@ -64,7 +68,9 @@ class _PathParam:
     name: str
     key: str
     field: Any | None
-    keep_slashes: bool
+    # Starlette's convertor for the segment, and its pattern compiled once
+    convertor: Any
+    pattern: re.Pattern[str]
 
 
 @dataclass(frozen=True)
@@ -82,6 +88,8 @@ class _RoutePlan:
     positional: tuple[str, ...]
     accepted: frozenset[str]
     injected: frozenset[str]
+    # Header params the task request sets itself; they can be declared but not passed
+    reserved: frozenset[str]
 
 
 # Routes are not hashable (Starlette defines __eq__), so the plan is cached on the route instance itself.
@@ -127,6 +135,13 @@ class Requester:
 
         unexpected = [name for name in values if name not in plan.accepted]
         if unexpected:
+            reserved = sorted(name for name in unexpected if name in plan.reserved)
+            if reserved:
+                raise TypeError(
+                    f"{plan.endpoint_name}() cannot take {', '.join(map(repr, reserved))} when triggered as a task: "
+                    "the task request sets that header itself (Cloud Tasks and Cloud Scheduler set their own "
+                    "headers on dispatch, and Content-Type is always application/json)"
+                )
             injected = sorted(name for name in unexpected if name in plan.injected)
             if injected:
                 raise TypeError(
@@ -149,8 +164,9 @@ class Requester:
             pairs = (
                 _expand_model(param, value, location="header", header=True) if param.is_model else [(param.wire, value)]
             )
+            explicit = values.get(param.name) is not None
             for key, item in pairs:
-                header_value = _header_value(key, item)
+                header_value = _header_value(key, item, explicit=explicit)
                 if header_value is not None:
                     headers[key] = header_value
 
@@ -160,11 +176,13 @@ class Requester:
             if value is None:
                 continue
             pairs = _expand_model(param, value, location="cookie") if param.is_model else [(param.wire, value)]
+            explicit = values.get(param.name) is not None
             for key, item in pairs:
                 if isinstance(item, _COLLECTIONS):
-                    if item:
+                    if item and explicit:
                         # FastAPI reads a cookie as one string, which never validates as a list
                         raise ValueError(f"cookie {key!r} cannot carry a collection: a cookie holds a single value")
+                    # Empty, or a default the request cannot express: the worker applies its own default
                     continue
                 # Quote like the stdlib does, so a ";" or "," in a value cannot end it early
                 cookies.append(f"{key}={_COOKIES.value_encode(_to_wire(item))[1]}")
@@ -184,17 +202,9 @@ class Requester:
                 raise MissingParamError(param=path_param.name)
             if path_param.field is not None:
                 value = _validate(path_param.field, value, loc=("path", path_param.key))
-            segment = _to_wire(value)
-            if not segment or ("/" in segment and not path_param.keep_slashes):
-                # ASGI servers decode %2F before routing, so such a value could never
-                # reach this route (Starlette's own url_path_for rejects it too).
-                raise ValueError(
-                    f"path parameter {path_param.name!r} must be non-empty and must not contain '/' "
-                    f"(got {segment!r}); declare it as '{{{path_param.key}:path}}' to allow slashes"
-                )
             # Percent-encode so reserved characters stay inside the segment instead
             # of being read as a query string or a fragment.
-            encoded = quote(segment, safe="/" if path_param.keep_slashes else "")
+            encoded = quote(_path_segment(path_param, value), safe="/")
             path = path.replace("{" + path_param.key + "}", encoded)
 
         query: list[tuple[str, str]] = []
@@ -221,10 +231,13 @@ class Requester:
 
         # Note: you might think urljoin is a better solution here, it is not.
         base = _parse_base_url(self.base_url)
-        full_path = base.path.strip("/") + "/" + path.strip("/")
+        # Only the leading slash is ours to remove: a trailing one is part of the route
+        # ("/send_email/") or of a path value, and the worker redirects or 404s without it.
+        full_path = base.path.strip("/") + "/" + path.lstrip("/")
         if base.query:
             # Keep query params from the base url unless the task sets the same key
-            query = [pair for pair in parse_qsl(base.query) if pair[0] not in set_keys] + query
+            inherited = parse_qsl(base.query, keep_blank_values=True)
+            query = [pair for pair in inherited if pair[0] not in set_keys] + query
         return urlunparse(base._replace(path=full_path, query=urlencode(query)))
 
     def _body(self, *, values: dict[str, Any]) -> bytes | None:
@@ -298,9 +311,21 @@ def _build_plan(route: APIRoute) -> _RoutePlan:
 
     path = tuple(_path_param(key, convertor, path_fields) for key, convertor in route.param_convertors.items())
 
-    accepted = frozenset(
-        [param.name for param in (*query, *all_headers, *cookies, *body)] + [param.name for param in path]
+    # An argument name belongs to the endpoint's own parameter first: a dependency parameter
+    # that happens to share the name (in another location) is not what the caller means.
+    own_names = (
+        {param.name for param in (*query, *all_headers, *cookies) if param.own}
+        | {param.name for param in body}
+        | {param.name for param in path}
     )
+    query, all_headers, cookies = (
+        tuple(param for param in group if param.own or param.name not in own_names)
+        for group in (query, all_headers, cookies)
+    )
+    headers = tuple(param for param in all_headers if not _is_reserved_header(param.wire))
+
+    accepted = frozenset([param.name for param in (*query, *headers, *cookies, *body)] + [param.name for param in path])
+    reserved = frozenset(param.name for param in all_headers if _is_reserved_header(param.wire)) - accepted
     positional: tuple[str, ...] = ()
     injected: frozenset[str] = frozenset()
     try:
@@ -313,13 +338,13 @@ def _build_plan(route: APIRoute) -> _RoutePlan:
             for name, parameter in signature.parameters.items()
             if parameter.kind in (parameter.POSITIONAL_ONLY, parameter.POSITIONAL_OR_KEYWORD)
         )
-        injected = frozenset(signature.parameters) - accepted
+        injected = frozenset(signature.parameters) - accepted - reserved
 
     return _RoutePlan(
         endpoint_name=getattr(route.endpoint, "__name__", "task"),
         path=path,
         query=query,
-        headers=tuple(p for p in all_headers if not p.wire.lower().startswith(_RESERVED_HEADER_PREFIXES)),
+        headers=headers,
         cookies=cookies,
         body=body,
         # A lone, non-embedded body param is used by FastAPI as the body field itself;
@@ -329,6 +354,7 @@ def _build_plan(route: APIRoute) -> _RoutePlan:
         positional=positional,
         accepted=accepted,
         injected=injected,
+        reserved=reserved,
     )
 
 
@@ -345,8 +371,37 @@ def _path_param(key: str, convertor: Any, declared: tuple[_Param, ...]) -> _Path
         name=match.name if match is not None else key,
         key=key,
         field=match.field if match is not None else None,
-        keep_slashes=isinstance(convertor, PathConvertor),
+        convertor=convertor,
+        pattern=re.compile(convertor.regex),
     )
+
+
+def _path_segment(path_param: _PathParam, value: Any) -> str:
+    """Return the text for a path segment, or raise if the route's own pattern would not match it."""
+    convertor = path_param.convertor
+    segment = _to_wire(value)
+    if isinstance(convertor, (IntegerConvertor, FloatConvertor)):
+        # Starlette's typed segments match one canonical form only (no sign, no exponent)
+        try:
+            segment = convertor.to_string(value)
+        except (AssertionError, TypeError, ValueError):
+            pass  # not representable: the pattern check below reports it
+    if not path_param.pattern.fullmatch(segment):
+        # ASGI servers decode %2F before routing, so percent-encoding cannot rescue a value
+        # the segment does not match: the request would hit a 404 or a different route.
+        hint = ""
+        if "/" in segment and isinstance(convertor, StringConvertor):
+            hint = f"; declare the segment as '{{{path_param.key}:path}}' to allow slashes"
+        raise ValueError(
+            f"path parameter {path_param.name!r} cannot be sent as {segment!r}: "
+            f"the route segment would not match it{hint}"
+        )
+    return segment
+
+
+def _is_reserved_header(wire: str) -> bool:
+    lowered = wire.lower()
+    return lowered in _RESERVED_HEADERS or lowered.startswith(_RESERVED_HEADER_PREFIXES)
 
 
 def _wire_name(field: Any) -> str:
@@ -377,6 +432,9 @@ def _accepts_none(annotation: Any) -> bool:
     """
     if annotation is Any or annotation is object or annotation is None or annotation is type(None):
         return True
+    if isinstance(annotation, TypeAliasType):
+        # type MaybeStr = str | None
+        return _accepts_none(annotation.__value__)
     origin = get_origin(annotation)
     if origin is Annotated:
         return _accepts_none(get_args(annotation)[0])
@@ -413,6 +471,17 @@ def _model_field_default(info: Any, model: BaseModel) -> Any:
     return info.get_default(call_default_factory=True)
 
 
+def _model_field_alias(info: Any, name: str) -> str:
+    validation_alias = info.validation_alias
+    if isinstance(validation_alias, AliasChoices):
+        # Only the listed names are accepted, and any of them will do: use the first plain one
+        validation_alias = next((choice for choice in validation_alias.choices if isinstance(choice, str)), None)
+    if isinstance(validation_alias, str) and validation_alias:
+        return validation_alias
+    alias: str = info.alias or name
+    return alias
+
+
 def _expand_model(param: _Param, value: Any, *, location: str, header: bool = False) -> list[tuple[str, Any]]:
     """Flatten a parameter model into its individual (wire name, value) params."""
     convert_underscores = header and getattr(param.field.field_info, "convert_underscores", True)
@@ -428,8 +497,7 @@ def _expand_model(param: _Param, value: Any, *, location: str, header: bool = Fa
             required=info.is_required(),
             get_default=partial(_model_field_default, info, value),
         )
-        validation_alias = info.validation_alias
-        key = validation_alias if isinstance(validation_alias, str) and validation_alias else (info.alias or name)
+        key = _model_field_alias(info, name)
         if convert_underscores and key == name:
             key = key.replace("_", "-")
         pairs.append((key, item))
@@ -478,45 +546,70 @@ def _body_value(param: _Param, values: dict[str, Any]) -> Any:
             raise MissingParamError(param=param.name)
         got_body = param.field.get_default()
     body_type = param.field.field_info.annotation
-    check_type = get_origin(body_type) or body_type
-    # Union members may not all be runtime-checkable classes, so unions are
-    # skipped. typing.Union's origin is not a class and falls out of the
-    # isinstance(check_type, type) check; PEP 604 unions (X | Y) have
-    # types.UnionType as origin, which IS a class, so exclude it explicitly.
-    if (
-        body_type is not None
-        and check_type is not UnionType
-        and isinstance(check_type, type)
-        and not isinstance(got_body, check_type)
-    ):
+    if not _has_declared_type(got_body, body_type):
         raise WrongTypeError(field=param.name, type=body_type)
     return got_body
 
 
+def _has_declared_type(value: Any, declared: Any) -> bool:
+    """A cheap check that a body argument is the kind of object the endpoint declares."""
+    check_type = get_origin(declared) or declared
+    # Union members may not all be runtime-checkable classes, so unions are
+    # skipped. typing.Union's origin is not a class and falls out of the
+    # isinstance(check_type, type) check; PEP 604 unions (X | Y) have
+    # types.UnionType as origin, which IS a class, so exclude it explicitly.
+    if declared is None or check_type is UnionType or not isinstance(check_type, type):
+        return True
+    # Page[Item] is its own class; an instance built as Page(...) is still a valid argument
+    generic_origin = getattr(check_type, "__pydantic_generic_metadata__", {}).get("origin")
+    if generic_origin is not None:
+        check_type = generic_origin
+    if check_type is float and isinstance(value, int) and not isinstance(value, bool):
+        return True
+    try:
+        return isinstance(value, check_type)
+    except TypeError:
+        # TypedDict and similar types cannot be instance-checked
+        return True
+
+
+def _jsonable(value: Any) -> Any:
+    """
+    Convert a value to JSON-compatible Python the way Pydantic does for a model field.
+
+    Models are dumped by alias, and Decimals, dates and durations become strings Pydantic
+    parses back exactly. Non-finite floats stay floats, which the worker accepts (written
+    as null they would be rejected). Types Pydantic does not know go to jsonable_encoder.
+    """
+    return to_jsonable_python(value, by_alias=True, fallback=jsonable_encoder)
+
+
 def _dump_json(value: Any) -> bytes:
-    if isinstance(value, BaseModel):
-        # jsonable_encoder does exactly this dump and then walks the result again in Python.
-        # Skipping that second pass produces the same JSON, apart from its SQLAlchemy
-        # safeguard that drops dict keys starting with "_sa". (model_dump_json would not:
-        # it writes non-finite floats as null, which the worker then rejects.)
-        return json.dumps(value.model_dump(mode="json", by_alias=True)).encode()
-    return json.dumps(jsonable_encoder(value)).encode()
+    return json.dumps(_jsonable(value)).encode()
 
 
 def _to_wire(value: Any) -> str:
     """Serialize a scalar the way FastAPI parses it back from a URL or header."""
     if type(value) is str:
         return value
-    encoded = jsonable_encoder(value)
+    if isinstance(value, (SecretStr, SecretBytes)):
+        raise ValueError(
+            "a secret cannot be sent as a task argument: Pydantic masks it when it is serialized, "
+            "so the worker would receive asterisks"
+        )
+    encoded = _jsonable(value)
     if isinstance(encoded, bool):
         return "true" if encoded else "false"
     return str(encoded)
 
 
-def _header_value(name: str, value: Any) -> str | None:
+def _header_value(name: str, value: Any, *, explicit: bool) -> str | None:
     if not isinstance(value, _COLLECTIONS):
         return _to_wire(value)
     if len(value) > 1:
+        if not explicit:
+            # A default the request cannot express: send nothing, the worker applies the same default
+            return None
         # Cloud Tasks and Cloud Scheduler send each header once, and FastAPI reads a list
         # header as one item per occurrence: it does not split a comma-separated value.
         raise ValueError(
