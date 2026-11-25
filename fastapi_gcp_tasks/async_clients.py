@@ -1,12 +1,9 @@
 # Standard Library Imports
 import asyncio
 from collections.abc import Callable
-from typing import Generic, TypeVar
-
-ClientT = TypeVar("ClientT")
 
 
-class AsyncClientProvider(Generic[ClientT]):
+class AsyncClientProvider[ClientT]:
     """
     Lazily resolves and caches an async gRPC client inside the running event loop.
 
