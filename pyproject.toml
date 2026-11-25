@@ -1,6 +1,6 @@
 [project]
 name = "fastapi-gcp-tasks"
-version = "0.4.0"
+version = "0.4.1"
 description = "Strongly typed background tasks and cron jobs for FastAPI on Google Cloud Tasks, Cloud Scheduler and Cloud Run. A serverless Celery alternative."
 readme = "README.md"
 license = "MIT"

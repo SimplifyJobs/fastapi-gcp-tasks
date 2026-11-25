@@ -3,6 +3,7 @@ import inspect
 import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from functools import lru_cache, partial
 from http.cookies import SimpleCookie
 from types import UnionType
@@ -295,6 +296,7 @@ def _build_plan(route: APIRoute) -> _RoutePlan:
     query = collect("query_params")
     all_headers = collect("header_params")
     cookies = collect("cookie_params")
+    declared_body = collect("body_params", group=False)
     # The JSON body is one document that only the caller can supply, so every body param
     # is treated as the endpoint's own, even when a dependency declares it
     body = tuple(
@@ -305,7 +307,7 @@ def _build_plan(route: APIRoute) -> _RoutePlan:
             own=True,
             nullable=_accepts_none(p.field.field_info.annotation),
         )
-        for p in collect("body_params", group=False)
+        for p in declared_body
     )
     path_fields = collect("path_params", group=False)
 
@@ -313,11 +315,9 @@ def _build_plan(route: APIRoute) -> _RoutePlan:
 
     # An argument name belongs to the endpoint's own parameter first: a dependency parameter
     # that happens to share the name (in another location) is not what the caller means.
-    own_names = (
-        {param.name for param in (*query, *all_headers, *cookies) if param.own}
-        | {param.name for param in body}
-        | {param.name for param in path}
-    )
+    own_names = {param.name for param in (*query, *all_headers, *cookies, *declared_body) if param.own} | {
+        param.name for param in path
+    }
     query, all_headers, cookies = (
         tuple(param for param in group if param.own or param.name not in own_names)
         for group in (query, all_headers, cookies)
@@ -380,12 +380,16 @@ def _path_segment(path_param: _PathParam, value: Any) -> str:
     """Return the text for a path segment, or raise if the route's own pattern would not match it."""
     convertor = path_param.convertor
     segment = _to_wire(value)
-    if isinstance(convertor, (IntegerConvertor, FloatConvertor)):
-        # Starlette's typed segments match one canonical form only (no sign, no exponent)
-        try:
-            segment = convertor.to_string(value)
-        except (AssertionError, TypeError, ValueError):
-            pass  # not representable: the pattern check below reports it
+    # Starlette's typed segments match one canonical form only (no sign, no exponent)
+    try:
+        if isinstance(convertor, IntegerConvertor):
+            segment = str(int(value))
+        elif isinstance(convertor, FloatConvertor):
+            # The shortest text that parses back to the same float, written without an exponent.
+            # (Starlette's own to_string keeps 20 decimal places and would round small values.)
+            segment = format(Decimal(repr(float(value))), "f")
+    except (TypeError, ValueError, InvalidOperation):
+        pass  # not representable: the pattern check below reports it
     if not path_param.pattern.fullmatch(segment):
         # ASGI servers decode %2F before routing, so percent-encoding cannot rescue a value
         # the segment does not match: the request would hit a 404 or a different route.
@@ -436,6 +440,9 @@ def _accepts_none(annotation: Any) -> bool:
         # type MaybeStr = str | None
         return _accepts_none(annotation.__value__)
     origin = get_origin(annotation)
+    if isinstance(origin, TypeAliasType):
+        # Maybe[str], for type Maybe[T] = T | None
+        return _accepts_none(origin.__value__)
     if origin is Annotated:
         return _accepts_none(get_args(annotation)[0])
     if origin in (Union, UnionType):
@@ -500,6 +507,14 @@ def _expand_model(param: _Param, value: Any, *, location: str, header: bool = Fa
         key = _model_field_alias(info, name)
         if convert_underscores and key == name:
             key = key.replace("_", "-")
+        if header and _is_reserved_header(key):
+            if name in value.model_fields_set:
+                raise TypeError(
+                    f"{param.name}.{name} cannot be sent when triggered as a task: the task request sets "
+                    f"the {key!r} header itself"
+                )
+            # Only declared so the worker can read it: nothing to send
+            continue
         pairs.append((key, item))
     return pairs
 

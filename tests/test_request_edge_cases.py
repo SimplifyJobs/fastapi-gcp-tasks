@@ -29,6 +29,7 @@ ORIGIN = "https://worker.example.com"
 QUEUE_PATH = "projects/test-project/locations/us-central1/queues/test-queue"
 
 type MaybeStr = str | None
+type Maybe[T] = T | None
 
 
 class Item(BaseModel):
@@ -56,6 +57,13 @@ class Payload(TypedDict):
     count: int
 
 
+class ControlHeaders(BaseModel):
+    """Header-parameter model that declares a header the task request sets itself."""
+
+    x_tenant: str
+    content_type: str = "text/plain"
+
+
 class SortFilters(BaseModel):
     """Query-parameter model whose field is only accepted under other names."""
 
@@ -65,6 +73,16 @@ class SortFilters(BaseModel):
 def audited(item: Annotated[str | None, Query()] = None) -> str | None:
     """Dependency whose query param shares its name with an endpoint body param."""
     return item
+
+
+def note_from_body(ref: Annotated[str, Body(embed=True)]) -> str:
+    """Dependency that reads a body param called ``ref``."""
+    return ref
+
+
+def ref_from_query(ref: Annotated[str | None, Query()] = None) -> str | None:
+    """Another dependency that reads a query param also called ``ref``."""
+    return ref
 
 
 client = MagicMock(spec=tasks_v2.CloudTasksClient)
@@ -232,6 +250,29 @@ def alias695(item: Item, note: Annotated[MaybeStr, Body()] = "keep") -> dict[str
     return {"item": item.name, "note": note}
 
 
+@router.post("/alias695_generic")
+@as_delayed_task
+def alias695_generic(item: Item, note: Annotated[Maybe[str], Body()] = "keep") -> dict[str, Any]:
+    """Nullable body param declared through a specialized generic ``type`` alias."""
+    return {"item": item.name, "note": note}
+
+
+@router.post("/control_headers")
+@as_delayed_task
+def control_headers(headers: Annotated[ControlHeaders, Header()]) -> dict[str, Any]:
+    """Echo a header-parameter model."""
+    return {"x_tenant": headers.x_tenant}
+
+
+@router.post("/two_dependencies")
+@as_delayed_task
+def two_dependencies(
+    body_ref: str = Depends(note_from_body), query_ref: str | None = Depends(ref_from_query)
+) -> dict[str, Any]:
+    """Two dependencies that each read a parameter called ``ref`` from a different place."""
+    return {"body_ref": body_ref, "query_ref": query_ref}
+
+
 @router.post("/sorted")
 @as_delayed_task
 def sorted_task(filters: Annotated[SortFilters, Query()]) -> dict[str, Any]:
@@ -337,6 +378,18 @@ class TestTypedPathSegments:
         http = _http(conv_float.delay(x=1e-7))
         assert replay(app, http) == (200, {"x": 1e-7})
 
+    @pytest.mark.parametrize("x", [1.1111111111111112e-5, 1e-21, 0.1, 3.14, 5.0, 1e22, 123456789.12345679])
+    def test_float_segment_keeps_every_digit(self, x: float) -> None:
+        """Plain notation must not round: the worker has to parse back the exact float."""
+        http = _http(conv_float.delay(x=x))
+        assert replay(app, http) == (200, {"x": x})
+
+    @pytest.mark.parametrize("x", [-1.5, float("inf"), float("nan")])
+    def test_float_the_segment_cannot_match(self, x: float) -> None:
+        """``{x:float}`` has no form for a sign or a non-finite value."""
+        with pytest.raises(ValueError, match="'x'"):
+            conv_float.delay(x=x)
+
 
 class TestBodiesThatAreNotASingleModel:
     """Bodies other than one top-level model are serialized the same way a model is."""
@@ -377,6 +430,11 @@ class TestBodiesThatAreNotASingleModel:
         http = _http(page.delay(page=Page(items=[Item(name="a")])))
         assert replay(app, http) == (200, {"items": ["a"]})
 
+    def test_nullable_through_a_specialized_generic_alias(self) -> None:
+        """``Maybe[str]`` for ``type Maybe[T] = T | None`` is nullable too."""
+        http = _http(alias695_generic.delay(item=Item(name="a"), note=None))
+        assert json.loads(http.body) == {"item": {"name": "a"}, "note": None}
+
     def test_nullable_through_a_type_alias(self) -> None:
         """``type MaybeStr = str | None`` is still nullable, so an explicit None is sent as null."""
         http = _http(alias695.delay(item=Item(name="a"), note=None))
@@ -399,6 +457,15 @@ class TestHeadersTheRequestControls:
 
         with pytest.raises(TypeError, match="content_type"):
             content_type.delay(content_type="text/csv")
+
+    def test_reserved_header_in_a_header_model(self) -> None:
+        """A header model cannot smuggle in a header the request controls either."""
+        http = _http(control_headers.delay(headers=ControlHeaders(x_tenant="dm")))
+        assert [name for name in http.headers if name.lower() == "content-type"] == ["Content-Type"]
+        assert http.headers["x-tenant"] == "dm"
+
+        with pytest.raises(TypeError, match="content_type"):
+            control_headers.delay(headers=ControlHeaders(x_tenant="dm", content_type="text/csv"))
 
 
 class TestDefaultsThatCannotBeSent:
@@ -424,6 +491,11 @@ class TestNames:
         """The endpoint's ``item`` body is the task argument; the dependency's query ``item`` is not."""
         http = _http(collide.delay(item=Item(name="a")))
         assert replay(app, http) == (200, {"item": "a", "audited": None})
+
+    def test_dependency_body_does_not_shadow_another_dependency(self) -> None:
+        """Only the endpoint's own parameters take precedence; two dependencies both receive the argument."""
+        http = _http(two_dependencies.delay(ref="r-1"))  # type: ignore[call-arg]
+        assert replay(app, http) == (200, {"body_ref": "r-1", "query_ref": "r-1"})
 
     def test_alias_choices_in_a_parameter_model(self) -> None:
         """A field that is only accepted under its alias choices is sent under the first one."""
