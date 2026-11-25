@@ -18,6 +18,7 @@ import pytest
 from fastapi import APIRouter, Body, Cookie, Depends, FastAPI, Header, Query
 from google.cloud import tasks_v2
 from pydantic import AliasChoices, BaseModel, Field, SecretStr
+from starlette.convertors import IntegerConvertor, register_url_convertor
 
 # Imports from this repository
 from fastapi_gcp_tasks import AsyncDelayedRouteBuilder, DelayedRouteBuilder, as_delayed_task, task_default_options
@@ -30,6 +31,20 @@ QUEUE_PATH = "projects/test-project/locations/us-central1/queues/test-queue"
 
 type MaybeStr = str | None
 type Maybe[T] = T | None
+type Identity[T] = T
+
+
+class PaddedIntConvertor(IntegerConvertor):
+    """A custom segment with its own URL form: four zero-padded digits."""
+
+    regex = "[0-9]{4}"
+
+    def to_string(self, value: int) -> str:
+        """Write the number zero-padded to four digits."""
+        return f"{value:04d}"
+
+
+register_url_convertor("padded", PaddedIntConvertor())
 
 
 class Item(BaseModel):
@@ -61,7 +76,7 @@ class ControlHeaders(BaseModel):
     """Header-parameter model that declares a header the task request sets itself."""
 
     x_tenant: str
-    content_type: str = "text/plain"
+    content_type: str | None = "text/plain"
 
 
 class SortFilters(BaseModel):
@@ -75,9 +90,9 @@ def audited(item: Annotated[str | None, Query()] = None) -> str | None:
     return item
 
 
-def note_from_body(ref: Annotated[str, Body(embed=True)]) -> str:
+def note_from_body(ref: Annotated[Item, Body(embed=True)]) -> str:
     """Dependency that reads a body param called ``ref``."""
-    return ref
+    return ref.name
 
 
 def ref_from_query(ref: Annotated[str | None, Query()] = None) -> str | None:
@@ -264,6 +279,36 @@ def control_headers(headers: Annotated[ControlHeaders, Header()]) -> dict[str, A
     return {"x_tenant": headers.x_tenant}
 
 
+@router.post("/control_headers_default")
+@as_delayed_task
+def control_headers_default(
+    headers: Annotated[ControlHeaders, Header()] = ControlHeaders(x_tenant="dm", content_type="text/plain"),  # noqa: B008
+) -> dict[str, Any]:
+    """Header-parameter model whose endpoint default sets a reserved field."""
+    return {"x_tenant": headers.x_tenant}
+
+
+@router.post("/padded/{n:padded}")
+@as_delayed_task
+def padded(n: int) -> dict[str, Any]:
+    """Echo a custom numeric segment."""
+    return {"n": n}
+
+
+@router.post("/loose_int/{n:int}")
+@as_delayed_task
+def loose_int(n: float) -> dict[str, Any]:
+    """An int segment whose parameter is (mistakenly) typed as a float."""
+    return {"n": n}
+
+
+@router.post("/alias695_identity")
+@as_delayed_task
+def alias695_identity(item: Item, note: Annotated[Identity[str | None], Body()] = "keep") -> dict[str, Any]:
+    """Nullable body param whose nullability comes from a generic alias's argument."""
+    return {"item": item.name, "note": note}
+
+
 @router.post("/two_dependencies")
 @as_delayed_task
 def two_dependencies(
@@ -384,6 +429,21 @@ class TestTypedPathSegments:
         http = _http(conv_float.delay(x=x))
         assert replay(app, http) == (200, {"x": x})
 
+    def test_integral_float_keeps_its_spelling(self) -> None:
+        """A whole number stays "/5", so a scheduled job with that URL is not seen as changed."""
+        assert urlsplit(_http(conv_float.delay(x=5.0)).url).path == "/conv_float/5"
+
+    def test_custom_numeric_segment_uses_its_own_format(self) -> None:
+        """A registered convertor decides how its values are written."""
+        http = _http(padded.delay(n=5))
+        assert urlsplit(http.url).path == "/padded/0005"
+        assert replay(app, http) == (200, {"n": 5})
+
+    def test_fraction_is_not_truncated_into_an_int_segment(self) -> None:
+        """1.5 must not become "/1": the segment cannot carry it, so fail at the call site."""
+        with pytest.raises(ValueError, match="'n'"):
+            loose_int.delay(n=1.5)
+
     @pytest.mark.parametrize("x", [-1.5, float("inf"), float("nan")])
     def test_float_the_segment_cannot_match(self, x: float) -> None:
         """``{x:float}`` has no form for a sign or a non-finite value."""
@@ -435,6 +495,11 @@ class TestBodiesThatAreNotASingleModel:
         http = _http(alias695_generic.delay(item=Item(name="a"), note=None))
         assert json.loads(http.body) == {"item": {"name": "a"}, "note": None}
 
+    def test_nullable_through_a_generic_alias_argument(self) -> None:
+        """``Identity[str | None]`` is nullable because its argument is."""
+        http = _http(alias695_identity.delay(item=Item(name="a"), note=None))
+        assert json.loads(http.body) == {"item": {"name": "a"}, "note": None}
+
     def test_nullable_through_a_type_alias(self) -> None:
         """``type MaybeStr = str | None`` is still nullable, so an explicit None is sent as null."""
         http = _http(alias695.delay(item=Item(name="a"), note=None))
@@ -467,6 +532,17 @@ class TestHeadersTheRequestControls:
         with pytest.raises(TypeError, match="content_type"):
             control_headers.delay(headers=ControlHeaders(x_tenant="dm", content_type="text/csv"))
 
+    def test_reserved_header_set_to_none_in_a_header_model(self) -> None:
+        """Setting the field at all is the mistake, whatever the value."""
+        with pytest.raises(TypeError, match="content_type"):
+            control_headers.delay(headers=ControlHeaders(x_tenant="dm", content_type=None))
+
+    def test_reserved_header_in_the_endpoint_default_model(self) -> None:
+        """A field the endpoint's own default sets was not passed by the caller, so it must not block the call."""
+        http = _http(control_headers_default.delay())
+        assert http.headers["x-tenant"] == "dm"
+        assert [name for name in http.headers if name.lower() == "content-type"] == ["Content-Type"]
+
 
 class TestDefaultsThatCannotBeSent:
     """A default the request cannot express is left to the worker instead of blocking the call."""
@@ -492,10 +568,11 @@ class TestNames:
         http = _http(collide.delay(item=Item(name="a")))
         assert replay(app, http) == (200, {"item": "a", "audited": None})
 
-    def test_dependency_body_does_not_shadow_another_dependency(self) -> None:
-        """Only the endpoint's own parameters take precedence; two dependencies both receive the argument."""
-        http = _http(two_dependencies.delay(ref="r-1"))  # type: ignore[call-arg]
-        assert replay(app, http) == (200, {"body_ref": "r-1", "query_ref": "r-1"})
+    def test_body_parameter_wins_over_a_dependency_parameter(self) -> None:
+        """The body is the caller's to supply, so a name it uses is the body's, whichever dependency declares it."""
+        http = _http(two_dependencies.delay(ref=Item(name="r-1")))  # type: ignore[call-arg]
+        assert _query(http) == []
+        assert replay(app, http) == (200, {"body_ref": "r-1", "query_ref": None})
 
     def test_alias_choices_in_a_parameter_model(self) -> None:
         """A field that is only accepted under its alias choices is sent under the first one."""

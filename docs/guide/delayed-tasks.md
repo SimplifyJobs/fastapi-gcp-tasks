@@ -84,6 +84,8 @@ A few rules keep mistakes at the call site instead of on the worker:
   or Cloud Tasks' own OIDC token usually supplies it. You can still pass such a parameter by name when you need
   to. Body parameters are different: the JSON body is one document only the caller can supply, so a required
   body parameter is required wherever it is declared.
+- **A name refers to one parameter.** It is the endpoint's own parameter if there is one, otherwise a body
+  parameter. A dependency's query, header or cookie parameter that shares that name cannot be passed.
 - **`Form()` and `File()` parameters are not supported.** Task bodies are always sent as JSON.
 
 ### Limits

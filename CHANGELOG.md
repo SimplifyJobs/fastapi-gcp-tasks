@@ -9,13 +9,13 @@ All notable changes to this project are documented here. The format follows
 ### Fixed
 
 - `{x:float}` path segments keep every digit of the value. In 0.4.0, values with more than 20 decimal places
-  were rounded, and values below `1e-20` were sent as `0`.
+  were rounded, and values below `1e-20` were sent as `0`. Values that 0.4.0 wrote correctly keep their spelling.
+- A fractional value for an `{n:int}` path segment raises `ValueError`. It used to be truncated.
 - A header parameter model can no longer add a second `Content-Type` header, or one that Cloud Tasks or Cloud
-  Scheduler sets. Setting such a field raises `TypeError`; leaving it at its default sends nothing.
-- A body parameter declared by a dependency no longer hides another dependency's query, header or cookie
-  parameter of the same name. Only the endpoint's own parameters take precedence.
-- A body parameter typed with a specialized generic alias, such as `Maybe[str]` for `type Maybe[T] = T | None`,
-  sends an explicit `None` as JSON `null`.
+  Scheduler sets. Setting such a field raises `TypeError`; a field that only the endpoint's default sets is left
+  out.
+- A body parameter typed with a generic alias sends an explicit `None` as JSON `null` when the alias or its
+  argument is nullable, such as `Maybe[str]` for `type Maybe[T] = T | None`.
 
 ## 0.4.0
 

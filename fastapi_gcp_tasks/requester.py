@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 from functools import lru_cache, partial
 from http.cookies import SimpleCookie
 from types import UnionType
-from typing import Annotated, Any, TypeAliasType, Union, get_args, get_origin
+from typing import Annotated, Any, TypeAliasType, TypeVar, Union, get_args, get_origin
 from urllib.parse import ParseResult, parse_qsl, quote, urlencode, urlparse, urlunparse
 
 # Third Party Imports
@@ -162,10 +162,12 @@ class Requester:
             value = _resolve(param, values, location="header")
             if value is None:
                 continue
-            pairs = (
-                _expand_model(param, value, location="header", header=True) if param.is_model else [(param.wire, value)]
-            )
             explicit = values.get(param.name) is not None
+            pairs = (
+                _expand_model(param, value, location="header", header=True, explicit=explicit)
+                if param.is_model
+                else [(param.wire, value)]
+            )
             for key, item in pairs:
                 header_value = _header_value(key, item, explicit=explicit)
                 if header_value is not None:
@@ -296,7 +298,6 @@ def _build_plan(route: APIRoute) -> _RoutePlan:
     query = collect("query_params")
     all_headers = collect("header_params")
     cookies = collect("cookie_params")
-    declared_body = collect("body_params", group=False)
     # The JSON body is one document that only the caller can supply, so every body param
     # is treated as the endpoint's own, even when a dependency declares it
     body = tuple(
@@ -307,17 +308,21 @@ def _build_plan(route: APIRoute) -> _RoutePlan:
             own=True,
             nullable=_accepts_none(p.field.field_info.annotation),
         )
-        for p in declared_body
+        for p in collect("body_params", group=False)
     )
     path_fields = collect("path_params", group=False)
 
     path = tuple(_path_param(key, convertor, path_fields) for key, convertor in route.param_convertors.items())
 
-    # An argument name belongs to the endpoint's own parameter first: a dependency parameter
-    # that happens to share the name (in another location) is not what the caller means.
-    own_names = {param.name for param in (*query, *all_headers, *cookies, *declared_body) if param.own} | {
-        param.name for param in path
-    }
+    # An argument name belongs to the endpoint's own parameter first, then to a body parameter
+    # (the body is the caller's to supply, wherever it is declared). A dependency's query,
+    # header or cookie parameter that happens to share the name is not what the caller means,
+    # and the two could not always take the same value anyway.
+    own_names = (
+        {param.name for param in (*query, *all_headers, *cookies) if param.own}
+        | {param.name for param in body}
+        | {param.name for param in path}
+    )
     query, all_headers, cookies = (
         tuple(param for param in group if param.own or param.name not in own_names)
         for group in (query, all_headers, cookies)
@@ -380,15 +385,21 @@ def _path_segment(path_param: _PathParam, value: Any) -> str:
     """Return the text for a path segment, or raise if the route's own pattern would not match it."""
     convertor = path_param.convertor
     segment = _to_wire(value)
-    # Starlette's typed segments match one canonical form only (no sign, no exponent)
+    # A typed segment matches one canonical form only (no sign, no exponent), and the convertor
+    # itself knows how to write it. That includes convertors an application registered.
+    is_int = isinstance(value, int) and not isinstance(value, bool)
+    is_number = is_int or isinstance(value, float)
     try:
         if isinstance(convertor, IntegerConvertor):
-            segment = str(int(value))
-        elif isinstance(convertor, FloatConvertor):
-            # The shortest text that parses back to the same float, written without an exponent.
-            # (Starlette's own to_string keeps 20 decimal places and would round small values.)
-            segment = format(Decimal(repr(float(value))), "f")
-    except (TypeError, ValueError, InvalidOperation):
+            if is_int:
+                # Not for a fraction: to_string would truncate 1.5 to "1"
+                segment = convertor.to_string(value)
+        elif isinstance(convertor, FloatConvertor) and is_number:
+            segment = convertor.to_string(value)
+            if type(convertor) is FloatConvertor and float(segment) != float(value):
+                # Starlette keeps 20 decimal places, which rounds small values
+                segment = _plain_float(float(value))
+    except (AssertionError, TypeError, ValueError, InvalidOperation):
         pass  # not representable: the pattern check below reports it
     if not path_param.pattern.fullmatch(segment):
         # ASGI servers decode %2F before routing, so percent-encoding cannot rescue a value
@@ -401,6 +412,12 @@ def _path_segment(path_param: _PathParam, value: Any) -> str:
             f"the route segment would not match it{hint}"
         )
     return segment
+
+
+def _plain_float(value: float) -> str:
+    """Write a float as the shortest text that parses back to the same value, without an exponent."""
+    text = format(Decimal(repr(value)), "f")
+    return text.rstrip("0").rstrip(".") if "." in text else text
 
 
 def _is_reserved_header(wire: str) -> bool:
@@ -427,13 +444,16 @@ def _is_param_model(field: Any) -> bool:
     return isinstance(annotation, type) and issubclass(annotation, BaseModel)
 
 
-def _accepts_none(annotation: Any) -> bool:
+def _accepts_none(annotation: Any, bindings: dict[Any, Any] | None = None) -> bool:
     """
     Whether a parameter annotated this way can hold None.
 
     Decided from the annotation alone: probing the field with None would run the
-    endpoint's own validators on a value the caller never passed.
+    endpoint's own validators on a value the caller never passed. ``bindings`` maps the
+    type parameters of a generic alias being expanded to the arguments it was given.
     """
+    if isinstance(annotation, TypeVar):
+        return bindings is not None and annotation in bindings and _accepts_none(bindings[annotation])
     if annotation is Any or annotation is object or annotation is None or annotation is type(None):
         return True
     if isinstance(annotation, TypeAliasType):
@@ -441,12 +461,16 @@ def _accepts_none(annotation: Any) -> bool:
         return _accepts_none(annotation.__value__)
     origin = get_origin(annotation)
     if isinstance(origin, TypeAliasType):
-        # Maybe[str], for type Maybe[T] = T | None
-        return _accepts_none(origin.__value__)
+        # Maybe[str] for type Maybe[T] = T | None, or Identity[str | None] for type Identity[T] = T
+        arguments = [
+            bindings[argument] if bindings and isinstance(argument, TypeVar) and argument in bindings else argument
+            for argument in get_args(annotation)
+        ]
+        return _accepts_none(origin.__value__, dict(zip(origin.__type_params__, arguments, strict=False)))
     if origin is Annotated:
-        return _accepts_none(get_args(annotation)[0])
+        return _accepts_none(get_args(annotation)[0], bindings)
     if origin in (Union, UnionType):
-        return any(_accepts_none(member) for member in get_args(annotation))
+        return any(_accepts_none(member, bindings) for member in get_args(annotation))
     return False
 
 
@@ -489,11 +513,29 @@ def _model_field_alias(info: Any, name: str) -> str:
     return alias
 
 
-def _expand_model(param: _Param, value: Any, *, location: str, header: bool = False) -> list[tuple[str, Any]]:
-    """Flatten a parameter model into its individual (wire name, value) params."""
+def _expand_model(
+    param: _Param, value: Any, *, location: str, header: bool = False, explicit: bool = True
+) -> list[tuple[str, Any]]:
+    """
+    Flatten a parameter model into its individual (wire name, value) params.
+
+    ``explicit`` says the caller passed the model, as opposed to it being the endpoint's default.
+    """
     convert_underscores = header and getattr(param.field.field_info, "convert_underscores", True)
     pairs: list[tuple[str, Any]] = []
     for name, info in type(value).model_fields.items():
+        key = _model_field_alias(info, name)
+        if convert_underscores and key == name:
+            key = key.replace("_", "-")
+        if header and _is_reserved_header(key):
+            # Declared so the worker can read it, never sent. Setting it is the caller's mistake,
+            # whatever the value; a field the endpoint's own default sets is not.
+            if explicit and name in value.model_fields_set:
+                raise TypeError(
+                    f"{param.name}.{name} cannot be sent when triggered as a task: the task request sets "
+                    f"the {key!r} header itself"
+                )
+            continue
         item = getattr(value, name)
         if item is None:
             continue
@@ -504,17 +546,6 @@ def _expand_model(param: _Param, value: Any, *, location: str, header: bool = Fa
             required=info.is_required(),
             get_default=partial(_model_field_default, info, value),
         )
-        key = _model_field_alias(info, name)
-        if convert_underscores and key == name:
-            key = key.replace("_", "-")
-        if header and _is_reserved_header(key):
-            if name in value.model_fields_set:
-                raise TypeError(
-                    f"{param.name}.{name} cannot be sent when triggered as a task: the task request sets "
-                    f"the {key!r} header itself"
-                )
-            # Only declared so the worker can read it: nothing to send
-            continue
         pairs.append((key, item))
     return pairs
 
