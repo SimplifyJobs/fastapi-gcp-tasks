@@ -56,7 +56,8 @@ These can require action when upgrading:
 - Cookie values are quoted, so a `;` or `,` in a value no longer cuts it short.
 - `.schedule()` no longer fails when another instance creates or replaces the same job at the same moment. The
   instance that loses the race compares its job with the one that won and only replaces it if they differ. It
-  still raises `AlreadyExists` if the job keeps being recreated under it for three attempts in a row.
+  raises `AlreadyExists` only if, after three attempts, the job is still not the one it asked for (or, with
+  `force=True`, if it loses the create every time).
 - Passing `None` for a body parameter that accepts it sends JSON `null` instead of the parameter's default.
 
 ### Added
