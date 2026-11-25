@@ -73,5 +73,5 @@ These can require action when upgrading:
 - Pydantic model bodies are no longer walked a second time in Python after pydantic-core has dumped them, and the
   request layout for each route is computed once. The JSON is the same, with one exception: dictionary keys
   starting with `_sa` are no longer stripped (a SQLAlchemy safeguard in `jsonable_encoder`). Client-side time per
-  `.delay()` for a 50-item order model drops from about 151µs to about 45µs; a small payload goes from about 27µs
-  to about 20µs.
+  `.delay()` for a 50-item order model drops from about 150µs to about 50µs; a small payload goes from about 27µs
+  to about 23µs.

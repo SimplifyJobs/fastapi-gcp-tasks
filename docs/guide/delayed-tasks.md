@@ -61,13 +61,13 @@ Each argument is sent the way FastAPI will read it back on the worker:
 | `Header()` parameter | Request header. Pass it by its Python name: `x_request_id="..."` is sent as `x-request-id`. A list header can carry one value, because a task request sends each header once. |
 | `Cookie()` parameter | `Cookie` request header. |
 | One Pydantic body | The JSON body. |
-| Several bodies, or `Body(embed=True)` | One JSON object keyed by parameter name. |
+| Several bodies, or `Body(embed=True)` | One JSON object keyed by parameter name, or by its alias if it has one. |
 
 A few rules keep mistakes at the call site instead of on the worker:
 
-- **Arguments you leave out fall back to the endpoint's default.** A `None` default is not sent at all; any
-  other default is sent explicitly. For a body parameter that accepts `None`, passing `None` sends JSON `null`,
-  which is different from leaving it out.
+- **Arguments you leave out fall back to the endpoint's default.** A default of `None` or an empty list sends
+  nothing; any other default is sent explicitly. For a body parameter that accepts `None`, passing `None` sends
+  JSON `null`, which is different from leaving it out.
 - **An empty list cannot be expressed in a query string, header or cookie.** Passing one raises `ValueError`,
   unless the endpoint's own default is also empty, in which case the key is simply left out. The same applies
   to list fields of a parameter model. A cookie cannot carry a list at all, since it holds a single value.
