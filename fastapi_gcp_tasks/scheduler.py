@@ -5,6 +5,7 @@ from typing import Any
 
 # Third Party Imports
 from fastapi.routing import APIRoute
+from google.api_core.exceptions import NotFound
 from google.cloud import scheduler_v1
 from google.protobuf import duration_pb2
 
@@ -173,20 +174,22 @@ class Scheduler(BaseScheduler):
     def _has_changed(self, request: scheduler_v1.CreateJobRequest) -> bool:
         try:
             job = self.client.get_job(name=request.job.name)
-            return self._job_changed(job=job, request=request)
-        # TODO: replace this with a more specific exception
-        except Exception:  # noqa: BLE001
+        except NotFound:
             return True
+        return self._job_changed(job=job, request=request)
 
-    def delete(self) -> bool | Exception:
-        """Delete the job from the scheduler if it exists."""
-        # We return true or exception because you could have the delete code on multiple instances
+    def delete(self) -> bool:
+        """
+        Delete the job from the scheduler.
+
+        Returns True if the job was deleted and False if it did not exist, so it is safe
+        to call from several instances at once. Any other error is raised.
+        """
         try:
             self.client.delete_job(name=self.job_id, timeout=self.job_create_timeout)
-            return True
-        # TODO: replace this with a more specific exception. we may also just raise the exception here?
-        except Exception as ex:  # noqa: BLE001
-            return ex
+        except NotFound:
+            return False
+        return True
 
 
 def _scheduler_method(methods: Iterable[str] | None) -> scheduler_v1.HttpMethod:

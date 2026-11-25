@@ -101,8 +101,8 @@ class SchedulerHandle[**P](Protocol):
         """Create (or update) the job on Cloud Scheduler. Takes the same arguments as the endpoint."""
         ...
 
-    def delete(self) -> bool | Exception:
-        """Delete the job from Cloud Scheduler if it exists."""
+    def delete(self) -> bool:
+        """Delete the job from Cloud Scheduler. Returns False if it did not exist."""
         ...
 
 
@@ -113,8 +113,8 @@ class AsyncSchedulerHandle[**P](Protocol):
         """Create (or update) the job on Cloud Scheduler. Takes the same arguments as the endpoint."""
         ...
 
-    async def delete(self) -> bool | Exception:
-        """Delete the job from Cloud Scheduler if it exists."""
+    async def delete(self) -> bool:
+        """Delete the job from Cloud Scheduler. Returns False if it did not exist."""
         ...
 
 

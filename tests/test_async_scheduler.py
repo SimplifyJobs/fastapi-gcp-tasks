@@ -5,9 +5,10 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 # Third Party Imports
+import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import NotFound, PermissionDenied
 from google.cloud import scheduler_v1
 
 # Imports from this repository
@@ -117,14 +118,62 @@ class TestAsyncScheduler:
         assert await scheduler.delete() is True
         client.delete_job.assert_awaited_once_with(name=scheduler.job_id, timeout=scheduler.job_create_timeout)
 
-    async def test_delete_returns_exception_on_failure(self) -> None:
-        """delete() should return the exception when the RPC fails."""
+    async def test_delete_returns_false_when_job_is_missing(self) -> None:
+        """delete() should return False, not an exception, when there is nothing to delete."""
         client = _mock_async_client()
         client.delete_job = AsyncMock(side_effect=NotFound("no job"))
         scheduler = _make_scheduler(client)
 
-        result = await scheduler.delete()
-        assert isinstance(result, NotFound)
+        assert await scheduler.delete() is False
+
+    async def test_delete_raises_unexpected_errors(self) -> None:
+        """Anything other than "not found" is a real failure and must not be swallowed."""
+        client = _mock_async_client()
+        client.delete_job = AsyncMock(side_effect=PermissionDenied("nope"))
+        scheduler = _make_scheduler(client)
+
+        with pytest.raises(PermissionDenied):
+            await scheduler.delete()
+
+    async def test_schedule_raises_when_existing_job_cannot_be_read(self) -> None:
+        """A failed lookup is not "the job changed": do not delete and recreate on a guess."""
+        client = _mock_async_client()
+        client.get_job = AsyncMock(side_effect=PermissionDenied("nope"))
+        scheduler = _make_scheduler(client)
+
+        with pytest.raises(PermissionDenied):
+            await scheduler.schedule()
+
+        client.delete_job.assert_not_awaited()
+        client.create_job.assert_not_awaited()
+
+    async def test_schedule_binds_arguments_before_any_rpc(self) -> None:
+        """Positional arguments are bound, and unknown ones fail before a job is touched."""
+        client = _mock_async_client()
+        router = APIRouter(
+            route_class=AsyncScheduledRouteBuilder(
+                base_url=BASE_URL,
+                location_path=LOCATION_PATH,
+                client=client,
+            )
+        )
+
+        @router.post("/pretzel_day/{branch_name}")
+        @as_async_scheduled_task
+        async def pretzel_day(branch_name: str, topping: str | None = None) -> None:
+            """Endpoint under test."""
+
+        await pretzel_day.scheduler(name="pretzel-day", schedule="0 9 * * 5").schedule("Scranton PA", "salt")
+        job = client.create_job.await_args.kwargs["request"].job
+        assert job.http_target.uri == f"{BASE_URL}/pretzel_day/Scranton%20PA?topping=salt"
+
+        client.reset_mock()
+        with pytest.raises(TypeError, match="toping"):
+            await pretzel_day.scheduler(name="pretzel-day", schedule="0 9 * * 5").schedule(  # type: ignore[call-arg]
+                "Scranton", toping="salt"
+            )
+        client.get_job.assert_not_awaited()
+        client.create_job.assert_not_awaited()
 
     async def test_factory_resolved_lazily_once(self) -> None:
         """A client factory should only be called on first use, exactly once."""

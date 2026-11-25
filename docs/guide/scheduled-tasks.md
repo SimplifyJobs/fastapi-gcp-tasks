@@ -54,5 +54,8 @@ instances. Pass `force=True` to always recreate.
 pretzel_day.scheduler(name="pretzel-day-9AM-scranton", schedule="0 9 * * 5").delete()
 ```
 
+`.delete()` returns `True` when the job was deleted and `False` when there was no such job, so it is safe to
+call from several instances. Any other failure, such as missing permissions, is raised.
+
 See [Configuration](configuration.md#scheduledroutebuilder) for all options, and
 [Async usage](async.md) for `AsyncScheduledRouteBuilder`, whose `.schedule()`/`.delete()` are coroutines.
