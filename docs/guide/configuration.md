@@ -50,8 +50,8 @@ Additional options beyond the builder options:
 
 ### Per-call options
 
-Everything above can be overridden per call (including builder options like `callback_base_url`) with
-`.options()` before calling `.delay()`:
+Everything above except `auto_create_queue` can be overridden per call (including builder options like
+`callback_base_url`) with `.options()` before calling `.delay()`:
 
 ```python
 # Trigger after 2 minutes

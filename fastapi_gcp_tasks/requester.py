@@ -3,8 +3,9 @@ import inspect
 from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import lru_cache
+from http.cookies import SimpleCookie
 from types import UnionType
-from typing import Any, get_origin
+from typing import Any, Union, get_args, get_origin
 from urllib.parse import ParseResult, parse_qsl, quote, urlencode, urlparse, urlunparse
 
 # Third Party Imports
@@ -29,6 +30,10 @@ except ImportError:
 # Endpoints may declare them to read them, but we must never send them.
 _RESERVED_HEADER_PREFIXES = ("x-cloudtasks-", "x-cloudscheduler")
 
+_COLLECTIONS = (list, tuple, set, frozenset)
+_MISSING: Any = object()
+_COOKIES = SimpleCookie()
+
 
 @dataclass(frozen=True)
 class _Param:
@@ -36,7 +41,7 @@ class _Param:
 
     # Keyword the caller uses: the Python parameter name.
     name: str
-    # Name on the wire: the alias, with underscores converted for headers.
+    # Name on the wire, as FastAPI resolved it (alias, or the dashed name of a header).
     wire: str
     # FastAPI's ModelField for the parameter (private type, so untyped here).
     field: Any
@@ -47,6 +52,9 @@ class _Param:
     own: bool
     # A Pydantic model grouping several parameters (FastAPI "parameter models").
     is_model: bool = False
+    # Body params only: None is a value this parameter accepts, so an explicit None
+    # is sent as JSON null instead of being read as "not provided".
+    nullable: bool = False
 
 
 @dataclass(frozen=True)
@@ -138,10 +146,11 @@ class Requester:
             value = _resolve(param, values, location="header")
             if value is None:
                 continue
-            if param.is_model:
-                headers.update((key, _join(item)) for key, item in _expand_model(param, value, header=True))
-            else:
-                headers[param.wire] = _join(value)
+            pairs = _expand_model(param, value, header=True) if param.is_model else [(param.wire, value)]
+            for key, item in pairs:
+                header_value = _header_value(key, item)
+                if header_value is not None:
+                    headers[key] = header_value
 
         cookies: list[str] = []
         for param in plan.cookies:
@@ -149,7 +158,8 @@ class Requester:
             if value is None:
                 continue
             pairs = _expand_model(param, value) if param.is_model else [(param.wire, value)]
-            cookies.extend(f"{key}={_to_wire(item)}" for key, item in pairs)
+            # Quote like the stdlib does, so a ";" or "," in a value cannot end it early
+            cookies.extend(f"{key}={_COOKIES.value_encode(_to_wire(item))[1]}" for key, item in pairs)
         if cookies:
             headers["Cookie"] = "; ".join(cookies)
 
@@ -180,14 +190,20 @@ class Requester:
             path = path.replace("{" + path_param.key + "}", encoded)
 
         query: list[tuple[str, str]] = []
+        set_keys: set[str] = set()
         for param in plan.query:
             value = _resolve(param, values, location="query")
             if value is None:
                 continue
             pairs = _expand_model(param, value) if param.is_model else [(param.wire, value)]
             for key, item in pairs:
-                if isinstance(item, (list, tuple, set, frozenset)):
-                    query.extend((key, _to_wire(element)) for element in item)
+                set_keys.add(key)
+                if isinstance(item, _COLLECTIONS):
+                    elements = [_to_wire(element) for element in item]
+                    if isinstance(item, (set, frozenset)):
+                        # Sets have no stable order; sort so the same call always builds the same URL
+                        elements.sort()
+                    query.extend((key, element) for element in elements)
                 else:
                     query.append((key, _to_wire(item)))
 
@@ -196,8 +212,7 @@ class Requester:
         full_path = base.path.strip("/") + "/" + path.strip("/")
         if base.query:
             # Keep query params from the base url unless the task sets the same key
-            overridden = {key for key, _ in query}
-            query = [pair for pair in parse_qsl(base.query) if pair[0] not in overridden] + query
+            query = [pair for pair in parse_qsl(base.query) if pair[0] not in set_keys] + query
         return urlunparse(base._replace(path=full_path, query=urlencode(query)))
 
     def _body(self, *, values: dict[str, Any]) -> bytes | None:
@@ -217,7 +232,8 @@ class Requester:
         members: list[bytes] = []
         for param in plan.body:
             value = _body_value(param, values)
-            if value is None:
+            if value is None and not _is_explicit_null(param, values):
+                # Not provided and no default to send: leave it to the worker
                 continue
             members.append(json.dumps(param.wire).encode() + b": " + _dump_json(value))
         return b"{" + b", ".join(members) + b"}"
@@ -236,11 +252,11 @@ def _build_plan(route: APIRoute) -> _RoutePlan:
     # The endpoint's own params first, so they win over a dependency declaring the same name
     dependants = [(True, root), *((False, dependant) for dependant in _sub_dependants(root))]
 
-    def collect(attr: str, *, header: bool = False, group: bool = True) -> tuple[_Param, ...]:
+    def collect(attr: str, *, group: bool = True) -> tuple[_Param, ...]:
         found: dict[str, _Param] = {}
         for own, dependant in dependants:
             for field in getattr(dependant, attr):
-                wire = _wire_name(field, header=header)
+                wire = _wire_name(field)
                 if wire not in found:
                     found[wire] = _Param(
                         name=field.name,
@@ -252,10 +268,14 @@ def _build_plan(route: APIRoute) -> _RoutePlan:
         return tuple(found.values())
 
     query = collect("query_params")
-    all_headers = collect("header_params", header=True)
+    all_headers = collect("header_params")
     cookies = collect("cookie_params")
-    # The JSON body is all-or-nothing, so every body param is treated as the endpoint's own
-    body = tuple(_Param(name=p.name, wire=p.wire, field=p.field, own=True) for p in collect("body_params", group=False))
+    # The JSON body is one document that only the caller can supply, so every body param
+    # is treated as the endpoint's own, even when a dependency declares it
+    body = tuple(
+        _Param(name=p.name, wire=p.wire, field=p.field, own=True, nullable=_accepts_none(p.field))
+        for p in collect("body_params", group=False)
+    )
     path_fields = collect("path_params", group=False)
 
     path = tuple(_path_param(key, convertor, path_fields) for key, convertor in route.param_convertors.items())
@@ -311,17 +331,28 @@ def _path_param(key: str, convertor: Any, declared: tuple[_Param, ...]) -> _Path
     )
 
 
-def _wire_name(field: Any, *, header: bool = False) -> str:
+def _wire_name(field: Any) -> str:
+    # FastAPI has already resolved the name it will read: for a header that is the dashed
+    # name unless convert_underscores is off or an explicit alias was given. Use it as is.
     validation_alias = getattr(field.field_info, "validation_alias", None)
     wire: str = validation_alias if isinstance(validation_alias, str) and validation_alias else field.alias
-    if header and wire == field.name and getattr(field.field_info, "convert_underscores", True):
-        wire = wire.replace("_", "-")
     return wire
 
 
 def _is_param_model(field: Any) -> bool:
     annotation = field.field_info.annotation
+    if get_origin(annotation) in (Union, UnionType):
+        # An optional parameter model: `Filters | None`
+        members = [member for member in get_args(annotation) if member is not type(None)]
+        if len(members) != 1:
+            return False
+        annotation = members[0]
     return isinstance(annotation, type) and issubclass(annotation, BaseModel)
+
+
+def _accepts_none(field: Any) -> bool:
+    _, errors = field.validate(None, {}, loc=("body",))
+    return not errors
 
 
 def _expand_model(param: _Param, value: Any, *, header: bool = False) -> list[tuple[str, Any]]:
@@ -350,7 +381,19 @@ def _resolve(param: _Param, values: dict[str, Any], *, location: str) -> Any:
             raise MissingParamError(param=param.name)
         # None is "not provided" for every non-body location: never send the text "None"
         return param.field.get_default()
-    return _validate(param.field, value, loc=(location, param.wire))
+    value = _validate(param.field, value, loc=(location, param.wire))
+    if isinstance(value, _COLLECTIONS) and not value:
+        # An empty collection has no representation in a URL or header: the key is simply
+        # absent, so the worker would use its own default. Only allow it when that is the same.
+        required = param.field.field_info.is_required()
+        default = None if required else param.field.get_default()
+        if not isinstance(default, _COLLECTIONS) or default:
+            outcome = "reject the request" if required else f"use its default ({default!r})"
+            raise ValueError(
+                f"{location} parameter {param.name!r} cannot be sent as an empty collection: "
+                f"the worker would {outcome} instead"
+            )
+    return value
 
 
 def _validate(field: Any, value: Any, *, loc: tuple[str, ...]) -> Any:
@@ -362,9 +405,14 @@ def _validate(field: Any, value: Any, *, loc: tuple[str, ...]) -> Any:
     return validated
 
 
+def _is_explicit_null(param: _Param, values: dict[str, Any]) -> bool:
+    return param.nullable and values.get(param.name, _MISSING) is None
+
+
 def _body_value(param: _Param, values: dict[str, Any]) -> Any:
     got_body = values.get(param.name)
-    if got_body is None:
+    if got_body is None and not _is_explicit_null(param, values):
+        # Not provided. (None for a parameter that cannot be null also means "not provided".)
         if param.field.field_info.is_required():
             raise MissingParamError(param=param.name)
         got_body = param.field.get_default()
@@ -386,8 +434,10 @@ def _body_value(param: _Param, values: dict[str, Any]) -> Any:
 
 def _dump_json(value: Any) -> bytes:
     if isinstance(value, BaseModel):
-        # Same document as jsonable_encoder + json.dumps, serialized by pydantic-core
-        return value.model_dump_json(by_alias=True).encode()
+        # jsonable_encoder does exactly this dump and then walks the result again in Python.
+        # Skipping that second pass keeps the output byte-identical (model_dump_json would
+        # not: it writes non-finite floats as null, which the worker then rejects).
+        return json.dumps(value.model_dump(mode="json", by_alias=True)).encode()
     return json.dumps(jsonable_encoder(value)).encode()
 
 
@@ -401,10 +451,17 @@ def _to_wire(value: Any) -> str:
     return str(encoded)
 
 
-def _join(value: Any) -> str:
-    if isinstance(value, (list, tuple, set, frozenset)):
-        return ", ".join(_to_wire(item) for item in value)
-    return _to_wire(value)
+def _header_value(name: str, value: Any) -> str | None:
+    if not isinstance(value, _COLLECTIONS):
+        return _to_wire(value)
+    if len(value) > 1:
+        # Cloud Tasks and Cloud Scheduler send each header once, and FastAPI reads a list
+        # header as one item per occurrence: it does not split a comma-separated value.
+        raise ValueError(
+            f"header {name!r} cannot carry {len(value)} values: a task request sends each header once. "
+            "Send a single value, or move the list to a query parameter or the body"
+        )
+    return _to_wire(next(iter(value))) if value else None
 
 
 @lru_cache(maxsize=128)

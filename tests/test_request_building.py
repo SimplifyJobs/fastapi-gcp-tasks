@@ -17,6 +17,8 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 # Third Party Imports
 import pytest
 from fastapi import APIRouter, Body, Cookie, Depends, FastAPI, Form, Header, Path, Query
+from fastapi.encoders import jsonable_encoder
+from google.api_core.exceptions import NotFound
 from google.cloud import scheduler_v1, tasks_v2
 from pydantic import BaseModel, Field
 
@@ -54,6 +56,12 @@ class Other(BaseModel):
     """Second body model."""
 
     n: int
+
+
+class Limits(BaseModel):
+    """Body model with a float that may be non-finite."""
+
+    limit: float
 
 
 class Aliased(BaseModel):
@@ -213,6 +221,55 @@ def guarded(item: Item, token: str = Depends(require_token)) -> dict[str, Any]:
 def with_ct_headers(meta: CloudTasksHeaders = Depends()) -> dict[str, Any]:
     """Echo the retry count Cloud Tasks reports."""
     return {"retry_count": meta.retry_count}
+
+
+@router.post("/aliased_header")
+@as_delayed_task
+def aliased_header(x_request_id: Annotated[str, Header(alias="x_request_id")]) -> dict[str, Any]:
+    """Echo a header whose explicit alias keeps its underscores."""
+    return {"x_request_id": x_request_id}
+
+
+@router.post("/list_header")
+@as_delayed_task
+def list_header(x_ids: Annotated[list[int], Header()]) -> dict[str, Any]:
+    """Echo a list-valued header."""
+    return {"x_ids": x_ids}
+
+
+@router.post("/set_query")
+@as_delayed_task
+def set_query(tags: Annotated[set[str], Query()]) -> dict[str, Any]:
+    """Echo a set-valued query param."""
+    return {"tags": sorted(tags)}
+
+
+@router.post("/list_default_query")
+@as_delayed_task
+def list_default_query(ids: Annotated[list[int], Query(default_factory=list)]) -> dict[str, Any]:
+    """Echo a list query param that defaults to empty."""
+    return {"ids": ids}
+
+
+@router.post("/nullable_bodies")
+@as_delayed_task
+def nullable_bodies(item: Item, note: Annotated[str | None, Body()] = "keep") -> dict[str, Any]:
+    """Echo a nullable body param that has a non-null default."""
+    return {"item": item.name, "note": note}
+
+
+@router.post("/required_nullable_body")
+@as_delayed_task
+def required_nullable_body(item: Item, note: Annotated[str | None, Body()]) -> dict[str, Any]:
+    """Echo a required body param that accepts null."""
+    return {"item": item.name, "note": note}
+
+
+@router.post("/limits")
+@as_delayed_task
+def limits(limits: Limits) -> dict[str, Any]:
+    """Report whether the limit arrived as infinity."""
+    return {"is_inf": limits.limit == float("inf")}
 
 
 app = FastAPI()
@@ -569,7 +626,7 @@ async def test_async_delay_binds_like_sync() -> None:
 def test_schedule_binds_like_delay() -> None:
     """Scheduled jobs share the same argument binding and request building."""
     scheduler_client = MagicMock(spec=scheduler_v1.CloudSchedulerClient)
-    scheduler_client.get_job.side_effect = Exception("not found")
+    scheduler_client.get_job.side_effect = NotFound("no job")
     scheduled_router = APIRouter(
         route_class=ScheduledRouteBuilder(
             client=scheduler_client, callback_base_url=CALLBACK_BASE_URL, location_path=LOCATION_PATH
@@ -590,3 +647,120 @@ def test_schedule_binds_like_delay() -> None:
         pretzel_day.scheduler(name="pretzel-day", schedule="0 9 * * 5").schedule(  # type: ignore[call-arg]
             "Scranton", item=Item(name="glaze"), toping="salt"
         )
+
+
+class TestCollections:
+    """Collections must be sent in a form FastAPI reads back as the same collection."""
+
+    def test_set_query_values_are_sorted(self) -> None:
+        """Sets have no stable order; an unsorted URL would make identical scheduled jobs look changed."""
+        http = _http(set_query.delay(tags={"cheese", "anchovy", "bacon"}))
+        assert [value for _, value in _query(http)] == ["anchovy", "bacon", "cheese"]
+        assert _replay(http) == (200, {"tags": ["anchovy", "bacon", "cheese"]})
+
+    def test_empty_list_for_a_required_param_is_rejected(self) -> None:
+        """An empty list leaves no key in the URL, so the worker would report the param as missing."""
+        with pytest.raises(ValueError, match="ids"):
+            typed_query.delay(ids=[], color=Color.red, flag=True, at=datetime(2026, 1, 1))
+
+    def test_empty_list_equal_to_the_default_is_omitted(self) -> None:
+        """When the worker's own default is also empty, leaving the key out delivers the same value."""
+        http = _http(list_default_query.delay(ids=[]))
+        assert _query(http) == []
+        assert _replay(http) == (200, {"ids": []})
+
+    def test_empty_list_overrides_the_base_url_value(self) -> None:
+        """A key the caller set is not inherited from the callback base URL, even when it sends nothing."""
+        http = _http(list_default_query.options(callback_base_url=f"{CALLBACK_BASE_URL}?ids=5").delay(ids=[]))
+        assert _query(http) == []
+
+    def test_single_item_list_header(self) -> None:
+        """A one-item list fits in the single header occurrence a task can send."""
+        http = _http(list_header.delay(x_ids=[7]))
+        assert _replay(http) == (200, {"x_ids": [7]})
+
+    def test_multi_value_list_header_is_rejected(self) -> None:
+        """FastAPI does not split a comma-separated header back into a list, so fail at the call site."""
+        with pytest.raises(ValueError, match="x-ids"):
+            list_header.delay(x_ids=[1, 2])
+
+
+class TestHeaderAndCookieEncoding:
+    """Header names and cookie values must survive exactly as FastAPI expects them."""
+
+    def test_explicit_alias_with_underscores_is_kept(self) -> None:
+        """Only FastAPI's own default conversion applies; an explicit alias is used literally."""
+        http = _http(aliased_header.delay(x_request_id="abc"))
+        assert "x_request_id" in http.headers
+        assert _replay(http) == (200, {"x_request_id": "abc"})
+
+    @pytest.mark.parametrize("value", ["a;b", "a, b", 'say "hi"', "two words", "plain"])
+    def test_cookie_values_are_quoted(self, value: str) -> None:
+        """A ";" in a cookie value used to end the value early."""
+        http = _http(cookies.delay(session=value, theme="dark"))
+        assert _replay(http) == (200, {"session": value, "theme": "dark"})
+
+
+class TestNullAndNonFiniteBodies:
+    """JSON can express null and the worker accepts non-finite floats, so neither may be rewritten."""
+
+    def test_explicit_none_is_sent_as_null(self) -> None:
+        """Passing None for a nullable param clears it instead of sending the default."""
+        http = _http(nullable_bodies.delay(item=Item(name="chili"), note=None))
+        assert json.loads(http.body) == {"item": {"name": "chili"}, "note": None}
+
+    def test_omitted_nullable_param_sends_its_default(self) -> None:
+        """Leaving the argument out is still different from passing None."""
+        http = _http(nullable_bodies.delay(item=Item(name="chili")))
+        assert json.loads(http.body) == {"item": {"name": "chili"}, "note": "keep"}
+        assert _replay(http) == (200, {"item": "chili", "note": "keep"})
+
+    def test_required_nullable_param_accepts_none(self) -> None:
+        """None is a real value for a required nullable param, not a missing argument."""
+        http = _http(required_nullable_body.delay(item=Item(name="chili"), note=None))
+        assert json.loads(http.body) == {"item": {"name": "chili"}, "note": None}
+
+    def test_none_for_a_non_nullable_body_still_means_not_provided(self) -> None:
+        """A param that cannot be null keeps the old meaning of None."""
+        with pytest.raises(MissingParamError, match="item"):
+            one_body.delay(item=None)  # type: ignore[arg-type]
+
+    def test_non_finite_floats_reach_the_worker(self) -> None:
+        """Infinity must not be rewritten to null, which the worker would reject."""
+        http = _http(limits.delay(limits=Limits(limit=float("inf"))))
+        assert _replay(http) == (200, {"is_inf": True})
+
+    def test_model_body_matches_the_previous_encoding(self) -> None:
+        """Model bodies stay byte-identical, so existing scheduled jobs are not seen as changed."""
+        person = Aliased(fullName="Kevin Malone")
+        http = _http(aliased_body.delay(person=person))
+        assert bytes(http.body) == json.dumps(jsonable_encoder(person)).encode()
+
+
+def test_optional_query_param_model_is_expanded() -> None:
+    """``Filters | None`` is still a parameter model and must be expanded, not stringified."""
+
+    class Filters(BaseModel):
+        limit: int = 10
+        tag: str | None = None
+
+    model_router = APIRouter(
+        route_class=DelayedRouteBuilder(
+            client=client,
+            callback_base_url="https://worker.example.com",
+            queue_path=QUEUE_PATH,
+            auto_create_queue=False,
+        )
+    )
+    try:
+
+        @model_router.post("/maybe_filtered")
+        @as_delayed_task
+        def maybe_filtered(filters: Annotated[Filters | None, Query()] = None) -> None:
+            """Task with an optional query-parameter model."""
+
+    except AssertionError:
+        pytest.skip("this FastAPI version does not support optional parameter models")
+
+    assert _query(_http(maybe_filtered.delay(filters=Filters(limit=5)))) == [("limit", "5")]
+    assert _query(_http(maybe_filtered.delay())) == []

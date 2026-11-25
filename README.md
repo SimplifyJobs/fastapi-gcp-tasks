@@ -177,8 +177,8 @@ make_chili.options(countdown=1800).delay(...)
 
 | Endpoint parameter | Sent as |
 | --- | --- |
-| Path parameter | Percent-encoded path segment |
-| Query parameter (scalars, lists, enums, dates) | Query string. Optional parameters you leave out are not sent |
+| Path parameter | Percent-encoded path segment. An empty value, or a `/` outside a `{name:path}` segment, raises `ValueError` |
+| Query parameter (scalars, lists, enums, dates) | Query string. A parameter you leave out is sent with its default, unless that default is `None` |
 | `Header()` / `Cookie()` parameter | Request header / `Cookie` header, passed by its Python name (`x_request_id=...`) |
 | One Pydantic body | The JSON body |
 | Several bodies, or `Body(embed=True)` | One JSON object keyed by parameter name |

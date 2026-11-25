@@ -17,12 +17,20 @@ These can require action when upgrading:
 - **`.delay()` and `.schedule()` raise `TypeError` for arguments that cannot be delivered.** That covers names
   the endpoint does not declare, and arguments the worker resolves itself, such as
   `db: Session = Depends(get_db)`. Both used to be dropped silently.
-- **A path parameter value that is empty or contains `/` raises `ValueError`**, unless the segment is declared as
-  `{name:path}`. ASGI servers decode `%2F` before routing, so such a value could never reach the route.
+- **An empty path parameter value raises `ValueError`, and so does one containing `/`** unless the segment is
+  declared as `{name:path}`. ASGI servers decode `%2F` before routing, so such a value could never reach the route.
+- **`Scheduler.delete()` and `AsyncScheduler.delete()` return `bool` and raise on unexpected errors**
+  ([#119](https://github.com/SimplifyJobs/fastapi-gcp-tasks/issues/119)). They return `True` when the job was
+  deleted and `False` when it did not exist. They used to return the exception object instead of raising it.
+- **`.schedule()` raises when the existing job cannot be read.** Any error from the lookup used to be treated as
+  "the job changed", which deleted and recreated the job on a guess. Only "not found" means the job is missing.
+- **Collections that cannot be delivered raise `ValueError`.** That covers a list header with more than one value
+  (a task request sends each header once) and an empty list for a query or header parameter whose default is not
+  also empty.
 - **Cookie parameters are sent in the standard `Cookie` header.** They used to be sent in a `Cookies` header that
   FastAPI does not read.
-- **Some scheduled jobs are recreated once after upgrading.** Model bodies are now compact JSON and omitted
-  optional query parameters are no longer in the URL, so `.schedule()` sees those jobs as changed the first time.
+- **Some scheduled jobs are recreated once after upgrading.** Omitted optional query parameters are no longer in
+  the URL, so `.schedule()` sees a job that relied on them as changed the first time.
 
 ### Fixed
 
@@ -39,8 +47,11 @@ These can require action when upgrading:
   `field required: body`.
 - Query, header and cookie parameter models (a Pydantic model grouping several parameters) are expanded into
   individual parameters.
-- A value passed for a parameter owned by a dependency is forwarded instead of dropped. Such parameters are still
-  never required at the call site, because a hook or Cloud Tasks itself often supplies them.
+- A value passed for a query, header or cookie parameter owned by a dependency is forwarded instead of dropped.
+  Such parameters are still never required at the call site, because a hook or Cloud Tasks itself often supplies
+  them.
+- Cookie values are quoted, so a `;` or `,` in a value no longer cuts it short.
+- Passing `None` for a body parameter that accepts it sends JSON `null` instead of the parameter's default.
 
 ### Added
 
@@ -52,6 +63,7 @@ These can require action when upgrading:
 
 ### Performance
 
-- Pydantic model bodies are serialized by pydantic-core instead of `jsonable_encoder` plus `json.dumps`, and the
-  request layout for each route is computed once. Client-side time per `.delay()` for a 50-item order model drops
-  from about 151µs to about 31µs; a small payload goes from about 27µs to about 19µs.
+- Pydantic model bodies are no longer walked a second time in Python after pydantic-core has dumped them, and the
+  request layout for each route is computed once. The JSON produced is byte-identical. Client-side time per
+  `.delay()` for a 50-item order model drops from about 151µs to about 45µs; a small payload goes from about 27µs
+  to about 20µs.
