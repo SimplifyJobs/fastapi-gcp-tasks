@@ -80,9 +80,15 @@ class AsyncScheduler(BaseScheduler):
             if await self._create(request=request):
                 return
             # Another instance recreated the job between our delete and our create.
-            # Do not assume its job matches ours: compare on the next round.
-            replace = False
+            # With force we just try again, since force never reads the job. Otherwise
+            # do not assume its job matches ours: compare on the next round.
+            replace = self.force
 
+        if not self.force:
+            # Out of attempts, but the job that won the last race may be the one we wanted
+            existing = await self._existing_job(request=request)
+            if existing is not None and not self._job_changed(job=existing, request=request):
+                return
         raise self._never_settled(request=request)
 
     async def _create(self, request: scheduler_v1.CreateJobRequest) -> bool:

@@ -142,6 +142,35 @@ class TestSchedule:
 
         assert client.create_job.call_count == 3
 
+    def test_losing_the_last_attempt_to_the_same_job_is_not_an_error(self) -> None:
+        """Running out of attempts is only a failure if the job that finally won differs from ours."""
+        client = _mock_client()
+        scheduler = _make_scheduler(client)
+        ours = scheduler_v1.Job(scheduler._build_create_job_request(values={}).job)
+        client.get_job.side_effect = [
+            scheduler_v1.Job(name=scheduler.job_id, schedule="0 0 * * *"),
+            scheduler_v1.Job(name=scheduler.job_id, schedule="0 6 * * *"),
+            scheduler_v1.Job(name=scheduler.job_id, schedule="0 12 * * *"),
+            ours,
+        ]
+        client.create_job.side_effect = AlreadyExists("recreated by another instance")
+
+        scheduler.schedule()
+
+        assert client.create_job.call_count == 3
+
+    def test_force_retries_without_reading_the_job(self) -> None:
+        """Force never reads the job, so recovering from a lost race must not need lookup permission either."""
+        client = _mock_client()
+        client.get_job.side_effect = PermissionDenied("nope")
+        client.create_job.side_effect = [AlreadyExists("recreated by another instance"), scheduler_v1.Job()]
+
+        _make_scheduler(client, force=True).schedule()
+
+        client.get_job.assert_not_called()
+        assert client.delete_job.call_count == 2
+        assert client.create_job.call_count == 2
+
     def test_force_recreates_without_lookup(self) -> None:
         """force=True should skip the diff and always delete and recreate."""
         client = _mock_client()

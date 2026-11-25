@@ -116,6 +116,38 @@ class TestAsyncScheduler:
         assert client.delete_job.await_count == 2
         assert client.create_job.await_count == 2
 
+    async def test_losing_the_last_attempt_to_the_same_job_is_not_an_error(self) -> None:
+        """Running out of attempts is only a failure if the job that finally won differs from ours."""
+        client = _mock_async_client()
+        scheduler = _make_scheduler(client)
+        ours = scheduler_v1.Job(scheduler._build_create_job_request(values={}).job)
+        client.get_job = AsyncMock(
+            side_effect=[
+                scheduler_v1.Job(name=scheduler.job_id, schedule="0 0 * * *"),
+                scheduler_v1.Job(name=scheduler.job_id, schedule="0 6 * * *"),
+                scheduler_v1.Job(name=scheduler.job_id, schedule="0 12 * * *"),
+                ours,
+            ]
+        )
+        client.create_job = AsyncMock(side_effect=AlreadyExists("recreated by another instance"))
+
+        await scheduler.schedule()
+
+        assert client.create_job.await_count == 3
+
+    async def test_force_retries_without_reading_the_job(self) -> None:
+        """Force never reads the job, so recovering from a lost race must not need lookup permission either."""
+        client = _mock_async_client()
+        client.get_job = AsyncMock(side_effect=PermissionDenied("nope"))
+        client.create_job = AsyncMock(side_effect=[AlreadyExists("recreated by another instance"), scheduler_v1.Job()])
+        scheduler = _make_scheduler(client, force=True)
+
+        await scheduler.schedule()
+
+        client.get_job.assert_not_awaited()
+        assert client.delete_job.await_count == 2
+        assert client.create_job.await_count == 2
+
     async def test_a_job_that_never_settles_raises(self) -> None:
         """If another process keeps winning with a different job, fail loudly instead of reporting success."""
         client = _mock_async_client()
