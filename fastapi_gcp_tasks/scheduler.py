@@ -104,12 +104,12 @@ class BaseScheduler(Requester):
 
         return self.pre_create_hook(request)
 
-    @staticmethod
-    def _never_settled(*, request: scheduler_v1.CreateJobRequest) -> AlreadyExists:
+    def _never_settled(self, *, request: scheduler_v1.CreateJobRequest) -> AlreadyExists:
+        # With force the competing job is never read, so nothing is known about how it differs
+        how = "" if self.force else " with a different definition"
         # google-api-core exceptions ship without annotations
         return AlreadyExists(  # type: ignore[no-untyped-call]
-            f"Job {request.job.name} kept being recreated with a different definition by another process "
-            f"({_MAX_SCHEDULE_ATTEMPTS} attempts)"
+            f"Job {request.job.name} kept being recreated{how} by another process ({_MAX_SCHEDULE_ATTEMPTS} attempts)"
         )
 
     @staticmethod

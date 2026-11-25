@@ -171,6 +171,17 @@ class TestSchedule:
         assert client.delete_job.call_count == 2
         assert client.create_job.call_count == 2
 
+    def test_force_that_never_wins_raises_without_claiming_a_difference(self) -> None:
+        """Forced scheduling never reads the competing job, so its error must not say how that job differs."""
+        client = _mock_client()
+        client.create_job.side_effect = AlreadyExists("recreated by another instance")
+
+        with pytest.raises(AlreadyExists, match="kept being recreated by another process"):
+            _make_scheduler(client, force=True).schedule()
+
+        client.get_job.assert_not_called()
+        assert client.create_job.call_count == 3
+
     def test_force_recreates_without_lookup(self) -> None:
         """force=True should skip the diff and always delete and recreate."""
         client = _mock_client()

@@ -51,7 +51,7 @@ instances. Pass `force=True` to always recreate.
 If another instance creates or replaces the same job at the same moment, `.schedule()` compares its job with
 the one that won and replaces it only if they differ. It raises `AlreadyExists` if the job keeps being
 recreated with a different definition. With `force=True` it never reads the job, so it deletes and creates
-again instead of comparing.
+again instead of comparing, and raises `AlreadyExists` if it keeps losing.
 
 ## Deleting a job
 

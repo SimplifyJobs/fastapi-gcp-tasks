@@ -102,7 +102,9 @@ Those parameters are sent with every task, unless a task argument with the same 
 
 - An argument that sends a value replaces them. That includes an argument you leave out when its default is
   sent, which is any default other than `None` or an empty list.
-- An explicit empty list replaces them with nothing.
+- An explicit empty list replaces them with nothing. An empty list is only accepted when the endpoint's own
+  default is also empty; otherwise it raises `ValueError`, as described under
+  [What you can pass](delayed-tasks.md#what-you-can-pass).
 - An argument that sends nothing leaves the callback URL's value in place. That is an argument you leave out
   whose default is `None` or empty.
 
