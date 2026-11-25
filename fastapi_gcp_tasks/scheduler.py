@@ -5,7 +5,7 @@ from typing import Any
 
 # Third Party Imports
 from fastapi.routing import APIRoute
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import AlreadyExists, NotFound
 from google.cloud import scheduler_v1
 from google.protobuf import duration_pb2
 
@@ -171,14 +171,24 @@ class Scheduler(BaseScheduler):
             if existing is None:
                 # Nothing to replace, so no delete: first-time scheduling only needs
                 # permission to look up and create jobs.
-                self.client.create_job(request=request, timeout=self.job_create_timeout)
-                return
-            if not self._job_changed(job=existing, request=request):
+                if self._create(request=request):
+                    return
+                # Another instance created the job between our lookup and our create
+                existing = self._existing_job(request=request)
+            if existing is not None and not self._job_changed(job=existing, request=request):
                 return
 
         # Delete and create job
         self.delete()
-        self.client.create_job(request=request, timeout=self.job_create_timeout)
+        self._create(request=request)
+
+    def _create(self, request: scheduler_v1.CreateJobRequest) -> bool:
+        """Create the job. Returns False if another instance created it first."""
+        try:
+            self.client.create_job(request=request, timeout=self.job_create_timeout)
+        except AlreadyExists:
+            return False
+        return True
 
     def _existing_job(self, request: scheduler_v1.CreateJobRequest) -> scheduler_v1.Job | None:
         try:

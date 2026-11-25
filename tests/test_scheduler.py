@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
-from google.api_core.exceptions import NotFound, PermissionDenied
+from google.api_core.exceptions import AlreadyExists, NotFound, PermissionDenied
 from google.cloud import scheduler_v1
 
 # Imports from this repository
@@ -73,6 +73,34 @@ class TestSchedule:
 
         client.delete_job.assert_not_called()
         client.create_job.assert_called_once()
+
+    def test_concurrent_create_of_the_same_job_is_not_an_error(self) -> None:
+        """Two instances starting together: the one that loses the create race accepts the other's job."""
+        client = _mock_client()
+        scheduler = _make_scheduler(client)
+        created_elsewhere = scheduler_v1.Job(scheduler._build_create_job_request(values={}).job)
+        client.get_job.side_effect = [NotFound("no job"), created_elsewhere]
+        client.create_job.side_effect = AlreadyExists("created by another instance")
+
+        scheduler.schedule()
+
+        client.create_job.assert_called_once()
+        client.delete_job.assert_not_called()
+
+    def test_concurrent_create_of_a_different_job_is_replaced(self) -> None:
+        """If the job that won the race differs from ours, it is replaced like any changed job."""
+        client = _mock_client()
+        scheduler = _make_scheduler(client)
+        client.get_job.side_effect = [
+            NotFound("no job"),
+            scheduler_v1.Job(name=scheduler.job_id, schedule="0 0 * * *"),
+        ]
+        client.create_job.side_effect = [AlreadyExists("created by another instance"), scheduler_v1.Job()]
+
+        scheduler.schedule()
+
+        client.delete_job.assert_called_once()
+        assert client.create_job.call_count == 2
 
     def test_force_recreates_without_lookup(self) -> None:
         """force=True should skip the diff and always delete and recreate."""

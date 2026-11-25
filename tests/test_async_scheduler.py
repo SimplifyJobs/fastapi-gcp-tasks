@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
-from google.api_core.exceptions import NotFound, PermissionDenied
+from google.api_core.exceptions import AlreadyExists, NotFound, PermissionDenied
 from google.cloud import scheduler_v1
 
 # Imports from this repository
@@ -85,6 +85,19 @@ class TestAsyncScheduler:
 
         client.delete_job.assert_not_awaited()
         client.create_job.assert_awaited_once()
+
+    async def test_concurrent_create_of_the_same_job_is_not_an_error(self) -> None:
+        """Two instances starting together: the one that loses the create race accepts the other's job."""
+        client = _mock_async_client()
+        scheduler = _make_scheduler(client)
+        created_elsewhere = scheduler_v1.Job(scheduler._build_create_job_request(values={}).job)
+        client.get_job = AsyncMock(side_effect=[NotFound("no job"), created_elsewhere])
+        client.create_job = AsyncMock(side_effect=AlreadyExists("created by another instance"))
+
+        await scheduler.schedule()
+
+        client.create_job.assert_awaited_once()
+        client.delete_job.assert_not_awaited()
 
     async def test_schedule_skips_unchanged_job(self) -> None:
         """An identical existing job should not be recreated."""
