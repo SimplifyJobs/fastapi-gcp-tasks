@@ -5,10 +5,30 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  schedule:
+    # Weekly: pyproject.toml sets no upper bound on FastAPI, so this is what
+    # catches a new FastAPI release breaking us while the repo is quiet.
+    - cron: '0 14 * * 1'
+  workflow_dispatch:
 
 jobs:
   tests:
+    name: tests (py${{ matrix.python-version }}, fastapi ${{ matrix.fastapi }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.13', '3.14', '3.15']
+        fastapi: [locked]
+        include:
+          # The lowest Python and FastAPI we claim to support. Keep in sync with pyproject.toml.
+          - python-version: '3.12'
+            fastapi: '0.151.0'
+          # The newest FastAPI on PyPI, whatever uv.lock says.
+          - python-version: '3.15'
+            fastapi: latest
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -19,17 +39,30 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.15'
+          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: uv sync
+
+      - name: Switch to FastAPI ${{ matrix.fastapi }}
+        if: matrix.fastapi != 'locked'
+        env:
+          FASTAPI_VERSION: ${{ matrix.fastapi }}
+        run: |
+          if [ "$FASTAPI_VERSION" = "latest" ]; then
+            uv pip install --python .venv/bin/python --upgrade fastapi
+          else
+            uv pip install --python .venv/bin/python "fastapi==$FASTAPI_VERSION"
+          fi
+          uv pip show --python .venv/bin/python fastapi
 
       - name: Start Cloud Tasks emulator
         run: |
           docker compose -f docker-compose.yaml up -d
 
       - name: Run tests
-        run: make test
+        # --no-sync: keep the FastAPI version chosen above instead of re-syncing to uv.lock
+        run: uv run --no-sync pytest -q -x -s
 
       - name: Show emulator logs on failure
         if: failure()

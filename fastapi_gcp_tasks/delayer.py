@@ -117,9 +117,9 @@ class Delayer(BaseDelayer):
         )
         self.client = client
 
-    def delay(self, **kwargs: Any) -> tasks_v2.Task:
-        """Delay a task on Cloud Tasks."""
-        request = self._build_create_task_request(values=kwargs)
+    def delay(self, *args: Any, **kwargs: Any) -> tasks_v2.Task:
+        """Delay a task on Cloud Tasks. Takes the same arguments as the endpoint."""
+        request = self._build_create_task_request(values=self._bind(args, kwargs))
         return self.client.create_task(request=request, timeout=self.task_create_timeout)
 
 

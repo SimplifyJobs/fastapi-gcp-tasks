@@ -1,16 +1,57 @@
 [project]
 name = "fastapi-gcp-tasks"
-version = "0.3.5"
-description = "Trigger delayed Cloud Tasks from FastAPI"
+version = "0.4.0"
+description = "Strongly typed background tasks and cron jobs for FastAPI on Google Cloud Tasks, Cloud Scheduler and Cloud Run. A serverless Celery alternative."
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "Team Simplify", email = "oss@simplify.jobs" }]
-requires-python = ">=3.11,<3.16"
+requires-python = ">=3.12"
+keywords = [
+    "fastapi",
+    "google-cloud",
+    "gcp",
+    "cloud-tasks",
+    "cloud-scheduler",
+    "cloud-run",
+    "background-tasks",
+    "task-queue",
+    "cron",
+    "celery",
+    "serverless",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: AsyncIO",
+    "Framework :: FastAPI",
+    "Framework :: Pydantic :: 2",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+    "Typing :: Typed",
+]
 dependencies = [
     "google-cloud-tasks>=2.21.0,<3.0.0",
     "google-cloud-scheduler>=2.13.3,<3.0.0",
-    "fastapi>=0.110.0,<0.166.0",
+    # No upper bound: FastAPI ships a new 0.x release every few days, and a cap makes
+    # this package uninstallable next to each one until we cut a release. CI runs the
+    # suite against the newest FastAPI on a schedule instead.
+    "fastapi>=0.151.0",
 ]
+
+[project.urls]
+Homepage = "https://simplifyjobs.github.io/fastapi-gcp-tasks/"
+Documentation = "https://simplifyjobs.github.io/fastapi-gcp-tasks/"
+Repository = "https://github.com/SimplifyJobs/fastapi-gcp-tasks"
+Issues = "https://github.com/SimplifyJobs/fastapi-gcp-tasks/issues"
+Changelog = "https://github.com/SimplifyJobs/fastapi-gcp-tasks/blob/master/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
@@ -24,6 +65,7 @@ dev = [
     "pydantic-settings>=2.15.0",
     "pytest-asyncio>=1.4.0",
     "types-requests>=2.33.0.20260906",
+    "python-multipart>=0.0.20",
 ]
 docs = [
     "mkdocs-material>=9.7.7",
@@ -80,7 +122,7 @@ exclude = [
 ]
 line-length = 120
 indent-width = 4
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = [

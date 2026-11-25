@@ -15,8 +15,11 @@ app = FastAPI()
 task_id = str(uuid4())
 
 
+# Endpoints that call the sync `.delay()` are plain `def`s: the call is a blocking gRPC
+# request, so FastAPI runs them in its threadpool. The `async def` endpoints below use the
+# AsyncDelayedRouteBuilder tasks and `await .delay()` instead.
 @app.get("/basic")
-async def basic() -> dict[str, str]:
+def basic() -> dict[str, str]:
     hello.delay(p=Payload(message="Basic task"))
     return {"message": "Basic hello task scheduled"}
 
@@ -34,13 +37,13 @@ async def async_with_countdown() -> dict[str, str]:
 
 
 @app.get("/with_countdown")
-async def with_countdown() -> dict[str, str]:
+def with_countdown() -> dict[str, str]:
     hello.options(countdown=5).delay(p=Payload(message="Countdown task"))
     return {"message": "Countdown hello task scheduled"}
 
 
 @app.get("/deduped")
-async def deduped(response: Response) -> dict[str, str]:
+def deduped(response: Response) -> dict[str, str]:
     # Note: this does not work with cloud-tasks-emulator.
     try:
         hello.options(task_id=task_id).delay(p=Payload(message="Deduped task"))
@@ -51,7 +54,7 @@ async def deduped(response: Response) -> dict[str, str]:
 
 
 @app.get("/fail")
-async def fail() -> dict[str, str]:
+def fail() -> dict[str, str]:
     fail_twice.delay()
     return {"message": "The triggered task will fail twice and then be marked done automatically"}
 

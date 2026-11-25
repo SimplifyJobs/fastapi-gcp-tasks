@@ -1,3 +1,9 @@
+---
+description: >-
+  Statically typed .delay() and .scheduler() calls for FastAPI background tasks, checked by
+  mypy and pyright with ParamSpec-based protocols.
+---
+
 # Type safety
 
 The package ships a `py.typed` marker (PEP 561), so mypy and pyright check everything you import from it.
@@ -58,8 +64,12 @@ make_chili.options(countdwn=60)       # type error: unknown option
 
 ## Caveats
 
-- Call `.delay()` and `.schedule()` with **keyword arguments** — the runtime only accepts keywords. The
-  protocols mirror the endpoint's full signature, so a positional call may typecheck but fail at runtime.
+- The protocols mirror the endpoint's full signature, including arguments the worker resolves itself (such
+  as `db: Session = Depends(get_db)`). Passing one of those typechecks but raises `TypeError` at runtime,
+  because the value could not be delivered to the worker.
+- The reverse also holds: a parameter owned by a dependency (say an `x_token` header read inside
+  `Depends(verify_token)`) can be passed to `.delay()` at runtime, but it is not part of the endpoint's
+  signature, so type checkers flag it. Prefer a [hook](hooks-and-dependencies.md) for those.
 - The decorators are casts: they tell the type checker the methods will exist. They do exist as soon as the
   router is registered with `route_class=...` from the matching builder — using `as_delayed_task` on a plain
   (non-delayed) route will typecheck but fail at runtime.

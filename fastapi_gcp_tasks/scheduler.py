@@ -5,6 +5,7 @@ from typing import Any
 
 # Third Party Imports
 from fastapi.routing import APIRoute
+from google.api_core.exceptions import AlreadyExists, NotFound
 from google.cloud import scheduler_v1
 from google.protobuf import duration_pb2
 
@@ -12,6 +13,9 @@ from google.protobuf import duration_pb2
 from fastapi_gcp_tasks.exception import BadMethodError
 from fastapi_gcp_tasks.hooks import ScheduledHook
 from fastapi_gcp_tasks.requester import Requester
+
+# How many times schedule() looks again after losing a create race to another instance
+_MAX_SCHEDULE_ATTEMPTS = 3
 
 
 class BaseScheduler(Requester):
@@ -100,6 +104,14 @@ class BaseScheduler(Requester):
 
         return self.pre_create_hook(request)
 
+    def _never_settled(self, *, request: scheduler_v1.CreateJobRequest) -> AlreadyExists:
+        # With force the competing job is never read, so nothing is known about how it differs
+        how = "" if self.force else " with a different definition"
+        # google-api-core exceptions ship without annotations
+        return AlreadyExists(  # type: ignore[no-untyped-call]
+            f"Job {request.job.name} kept being recreated{how} by another process ({_MAX_SCHEDULE_ATTEMPTS} attempts)"
+        )
+
     @staticmethod
     def _job_changed(*, job: scheduler_v1.Job, request: scheduler_v1.CreateJobRequest) -> bool:
         """Compare an existing job against the job we want to create, ignoring output-only fields."""
@@ -161,32 +173,66 @@ class Scheduler(BaseScheduler):
         )
         self.client = client
 
-    def schedule(self, **kwargs: Any) -> None:
-        """Schedule a job on Cloud Scheduler."""
-        request = self._build_create_job_request(values=kwargs)
+    def schedule(self, *args: Any, **kwargs: Any) -> None:
+        """Schedule a job on Cloud Scheduler. Takes the same arguments as the endpoint."""
+        request = self._build_create_job_request(values=self._bind(args, kwargs))
 
-        if self.force or self._has_changed(request=request):
+        replace = self.force
+        for _ in range(_MAX_SCHEDULE_ATTEMPTS):
+            if not replace:
+                existing = self._existing_job(request=request)
+                if existing is None:
+                    # Nothing to replace, so no delete: first-time scheduling only needs
+                    # permission to look up and create jobs.
+                    if self._create(request=request):
+                        return
+                    # Another instance created the job first: look at what it created
+                    continue
+                if not self._job_changed(job=existing, request=request):
+                    return
+
             # Delete and create job
             self.delete()
-            self.client.create_job(request=request, timeout=self.job_create_timeout)
+            if self._create(request=request):
+                return
+            # Another instance recreated the job between our delete and our create.
+            # With force we just try again, since force never reads the job. Otherwise
+            # do not assume its job matches ours: compare on the next round.
+            replace = self.force
 
-    def _has_changed(self, request: scheduler_v1.CreateJobRequest) -> bool:
+        if not self.force:
+            # Out of attempts, but the job that won the last race may be the one we wanted
+            existing = self._existing_job(request=request)
+            if existing is not None and not self._job_changed(job=existing, request=request):
+                return
+        raise self._never_settled(request=request)
+
+    def _create(self, request: scheduler_v1.CreateJobRequest) -> bool:
+        """Create the job. Returns False if another instance created it first."""
         try:
-            job = self.client.get_job(name=request.job.name)
-            return self._job_changed(job=job, request=request)
-        # TODO: replace this with a more specific exception
-        except Exception:  # noqa: BLE001
-            return True
+            self.client.create_job(request=request, timeout=self.job_create_timeout)
+        except AlreadyExists:
+            return False
+        return True
 
-    def delete(self) -> bool | Exception:
-        """Delete the job from the scheduler if it exists."""
-        # We return true or exception because you could have the delete code on multiple instances
+    def _existing_job(self, request: scheduler_v1.CreateJobRequest) -> scheduler_v1.Job | None:
+        try:
+            return self.client.get_job(name=request.job.name)
+        except NotFound:
+            return None
+
+    def delete(self) -> bool:
+        """
+        Delete the job from the scheduler.
+
+        Returns True if the job was deleted and False if it did not exist, so it is safe
+        to call from several instances at once. Any other error is raised.
+        """
         try:
             self.client.delete_job(name=self.job_id, timeout=self.job_create_timeout)
-            return True
-        # TODO: replace this with a more specific exception. we may also just raise the exception here?
-        except Exception as ex:  # noqa: BLE001
-            return ex
+        except NotFound:
+            return False
+        return True
 
 
 def _scheduler_method(methods: Iterable[str] | None) -> scheduler_v1.HttpMethod:

@@ -1,3 +1,9 @@
+---
+description: >-
+  Trigger any FastAPI endpoint later with Google Cloud Tasks: .delay(), countdowns,
+  deduplication, retries, and how arguments become the task's HTTP request.
+---
+
 # Delayed tasks
 
 Delayed tasks are the Cloud Tasks half of the library: trigger any FastAPI endpoint later, with retries
@@ -34,15 +40,48 @@ Pydantic bodies, `Depends`, middlewares, and telemetry.
 make_chili.delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))
 ```
 
-`.delay()` takes the same (keyword) arguments as the endpoint, validates them, builds the full task URL, and
-creates the task on Cloud Tasks. The return value of the endpoint is meaningless to the queue — only the
-HTTP status matters (2xx acknowledges the task; anything else retries it).
+`.delay()` takes the same arguments as the endpoint (by keyword or by position), validates them, builds the
+full task URL, and creates the task on Cloud Tasks. The return value of the endpoint is meaningless to the
+queue — only the HTTP status matters (2xx acknowledges the task; anything else retries it).
 
 To trigger 30 minutes later:
 
 ```python
 make_chili.options(countdown=1800).delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))
 ```
+
+## What you can pass
+
+Each argument is sent the way FastAPI will read it back on the worker:
+
+| Endpoint parameter | Sent as |
+| --- | --- |
+| Path parameter | Percent-encoded path segment. |
+| Query parameter | Query string. Lists repeat the key, enums send their value, dates use ISO 8601. |
+| `Header()` parameter | Request header. Pass it by its Python name: `x_request_id="..."` is sent as `x-request-id`. A list header can carry one value, because a task request sends each header once. |
+| `Cookie()` parameter | `Cookie` request header. |
+| One Pydantic body | The JSON body. |
+| Several bodies, or `Body(embed=True)` | One JSON object keyed by parameter name. |
+
+A few rules keep mistakes at the call site instead of on the worker:
+
+- **Arguments you leave out fall back to the endpoint's default.** A `None` default is not sent at all; any
+  other default is sent explicitly. For a body parameter that accepts `None`, passing `None` sends JSON `null`,
+  which is different from leaving it out.
+- **An empty list cannot be expressed in a query string, header or cookie.** Passing one raises `ValueError`,
+  unless the endpoint's own default is also empty, in which case the key is simply left out. The same applies
+  to list fields of a parameter model. A cookie cannot carry a list at all, since it holds a single value.
+- **Unknown arguments raise `TypeError`**, as they would in a normal function call. So does a value for an
+  argument the worker resolves itself, such as `db: Session = Depends(get_db)`.
+- **Values are validated** against the endpoint's annotations before the task is created. A missing required
+  argument raises `MissingParamError`; a path value that is empty or contains `/` raises `ValueError` (declare
+  the segment as `{name:path}` to allow slashes).
+- **Query, header and cookie parameters owned by a dependency are optional here.** If `Depends(verify_token)`
+  reads an `Authorization` header, `.delay()` does not ask for it, because a [hook](hooks-and-dependencies.md)
+  or Cloud Tasks' own OIDC token usually supplies it. You can still pass such a parameter by name when you need
+  to. Body parameters are different: the JSON body is one document only the caller can supply, so a required
+  body parameter is required wherever it is declared.
+- **`Form()` and `File()` parameters are not supported.** Task bodies are always sent as JSON.
 
 ## Per-endpoint defaults
 

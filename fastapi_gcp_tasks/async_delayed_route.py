@@ -117,7 +117,7 @@ def AsyncDelayedRouteBuilder(  # noqa: N802
                 task_id=opts.get("task_id"),
             )
 
-        async def delay(self, **kwargs: Any) -> tasks_v2.Task:
-            return await self.delay_options().delay(**kwargs)
+        async def delay(self, *args: Any, **kwargs: Any) -> tasks_v2.Task:
+            return await self.delay_options().delay(*args, **kwargs)
 
     return AsyncTaskRouteMixin

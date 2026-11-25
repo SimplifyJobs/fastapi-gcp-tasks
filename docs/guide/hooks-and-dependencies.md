@@ -1,3 +1,9 @@
+---
+description: >-
+  Customize Cloud Tasks and Cloud Scheduler requests with hooks (OIDC and OAuth tokens,
+  deadlines), and read retry counts and task metadata with FastAPI dependencies.
+---
+
 # Hooks & dependencies
 
 ## Hooks

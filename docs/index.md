@@ -15,6 +15,8 @@ Your tasks are regular FastAPI endpoints. Trigger one later with `.delay()`, or 
 `.scheduler()` — GCP's Cloud Tasks queue and Cloud Scheduler make the HTTP calls back to your service, with
 retries and rate control handled by the queue (and opt-in deduplication by passing a stable `task_id`).
 
+Built and maintained by [Simplify](https://simplify.jobs), where we use it for our own background jobs.
+
 ```mermaid
 sequenceDiagram
     autonumber

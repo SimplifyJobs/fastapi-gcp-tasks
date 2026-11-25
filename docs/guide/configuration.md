@@ -1,3 +1,9 @@
+---
+description: >-
+  Every option for DelayedRouteBuilder, ScheduledRouteBuilder and their async variants:
+  callback URLs, queues, timeouts, hooks, clients, and per-task overrides.
+---
+
 # Configuration
 
 ## DelayedRouteBuilder
@@ -13,12 +19,13 @@ def simple_task() -> None: ...
 
 | Option | Description |
 | --- | --- |
-| `base_url` | The URL of your worker FastAPI service. |
+| `callback_base_url` | The externally reachable URL prefix to which the task route's own path is appended. Include any prefix added later by an outer `include_router()` call — see [below](#routers-mounted-under-an-outer-prefix). |
+| `base_url` | Legacy alias for `callback_base_url`. Pass only one of the two. |
 | `queue_path` | Full path of the Cloud Tasks queue. (Hint: use the [`queue_path`](../api/utils.md) util.) |
 | `task_create_timeout` | How long to wait before giving up on creating the cloud task. Default `10.0` seconds. |
 | `pre_create_hook` | Edit the `CreateTaskRequest` before it is sent (e.g. auth for Cloud Run). See [Hooks](hooks-and-dependencies.md). |
 | `client` | Override the `CloudTasksClient` (e.g. custom credentials or transport, the emulator). |
-| `auto_create_queue` | Ensure the queue exists at builder creation time. Default `True`. |
+| `auto_create_queue` | Ensure the queue exists at builder creation time. Default `True`. Set it to `False` when the queue is managed elsewhere (Terraform, `gcloud`) or the service account may only enqueue tasks. |
 
 ### Task-level default options
 
@@ -43,8 +50,8 @@ Additional options beyond the builder options:
 
 ### Per-call options
 
-Everything above can be overridden per call (including builder options like `base_url`) with `.options()`
-before calling `.delay()`:
+Everything above except `auto_create_queue` can be overridden per call (including builder options like
+`callback_base_url`) with `.options()` before calling `.delay()`:
 
 ```python
 # Trigger after 2 minutes
@@ -52,6 +59,56 @@ simple_task.options(countdown=120).delay()
 ```
 
 The accepted keys are typed as the [`DelayOptions` TypedDict](../api/protocols.md).
+
+### Routers mounted under an outer prefix
+
+FastAPI preserves included routers instead of cloning their routes. A route class therefore
+knows the path declared on its own router, but it cannot unambiguously infer a prefix added later — especially
+because the same router can be included more than once. Put that externally visible prefix in
+`callback_base_url`:
+
+```python
+service_url = "https://worker.example.com"
+
+DelayedRoute = DelayedRouteBuilder(
+    callback_base_url=f"{service_url}/tasks",
+    queue_path=queue_path(...),
+    pre_create_hook=oidc_delayed_hook(
+        token=tasks_v2.OidcToken(
+            service_account_email="tasks@example.iam.gserviceaccount.com",
+            audience=service_url,
+        ),
+    ),
+)
+
+task_router = APIRouter(route_class=DelayedRoute, prefix="/auth")
+
+
+@task_router.post("/confirm/{user_id}")
+def confirm_user(user_id: str) -> None: ...
+
+
+app.include_router(task_router, prefix="/tasks")
+```
+
+`confirm_user.delay(user_id="42")` now targets `https://worker.example.com/tasks/auth/confirm/42`. The OIDC
+audience remains the service URL; it does not need the callback path prefix. The same rule applies to the
+async and scheduled route builders.
+
+### Query parameters on the callback URL
+
+`callback_base_url` may carry its own query string, for example `https://worker.example.com/tasks?tenant=dm`.
+Those parameters are sent with every task, unless a task argument with the same name takes their place:
+
+- An argument that sends a value replaces them. That includes an argument you leave out when its default is
+  sent, which is any default other than `None` or an empty list.
+- An explicit empty list replaces them with nothing. An empty list is only accepted when the endpoint's own
+  default is also empty; otherwise it raises `ValueError`, as described under
+  [What you can pass](delayed-tasks.md#what-you-can-pass).
+- An argument that sends nothing leaves the callback URL's value in place. That is an argument you leave out
+  whose default is `None` or empty.
+
+Passing `None` for a query parameter is the same as leaving the argument out.
 
 ## AsyncDelayedRouteBuilder
 
@@ -78,7 +135,8 @@ simple_scheduled_task.scheduler(name="simple_scheduled_task", schedule="* * * * 
 
 | Option | Description |
 | --- | --- |
-| `base_url` | The URL of your worker FastAPI service. |
+| `callback_base_url` | The externally reachable URL prefix to which the scheduled route's own path is appended, including any outer `include_router()` prefix. |
+| `base_url` | Legacy alias for `callback_base_url`. Pass only one of the two. |
 | `location_path` | Full location path for Cloud Scheduler. (Hint: use the [`location_path`](../api/utils.md) util.) |
 | `job_create_timeout` | How long to wait before giving up on creating the job. Default `10.0` seconds. |
 | `pre_create_hook` | Edit the `CreateJobRequest` before it is sent. See [Hooks](hooks-and-dependencies.md). |

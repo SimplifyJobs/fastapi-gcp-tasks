@@ -1,3 +1,9 @@
+---
+description: >-
+  Trigger Google Cloud Tasks from async FastAPI endpoints without blocking the event loop,
+  using AsyncDelayedRouteBuilder and AsyncScheduledRouteBuilder.
+---
+
 # Async usage
 
 `DelayedRouteBuilder`'s `.delay()` makes a blocking gRPC call. Called from an async endpoint, it stalls the

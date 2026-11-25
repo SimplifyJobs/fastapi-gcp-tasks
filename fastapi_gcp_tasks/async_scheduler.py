@@ -4,12 +4,13 @@ from typing import Any
 
 # Third Party Imports
 from fastapi.routing import APIRoute
+from google.api_core.exceptions import AlreadyExists, NotFound
 from google.cloud import scheduler_v1
 
 # Imports from this repository
 from fastapi_gcp_tasks.async_clients import AsyncClientProvider
 from fastapi_gcp_tasks.hooks import ScheduledHook
-from fastapi_gcp_tasks.scheduler import BaseScheduler
+from fastapi_gcp_tasks.scheduler import _MAX_SCHEDULE_ATTEMPTS, BaseScheduler
 
 AsyncCloudSchedulerClientFactory = Callable[[], scheduler_v1.CloudSchedulerAsyncClient]
 
@@ -56,32 +57,66 @@ class AsyncScheduler(BaseScheduler):
         )
         self.client_provider = client_provider
 
-    async def schedule(self, **kwargs: Any) -> None:
-        """Schedule a job on Cloud Scheduler without blocking the event loop."""
-        request = self._build_create_job_request(values=kwargs)
+    async def schedule(self, *args: Any, **kwargs: Any) -> None:
+        """Schedule a job on Cloud Scheduler without blocking the event loop. Takes the same arguments as the endpoint."""
+        request = self._build_create_job_request(values=self._bind(args, kwargs))
 
-        if self.force or await self._has_changed(request=request):
+        replace = self.force
+        for _ in range(_MAX_SCHEDULE_ATTEMPTS):
+            if not replace:
+                existing = await self._existing_job(request=request)
+                if existing is None:
+                    # Nothing to replace, so no delete: first-time scheduling only needs
+                    # permission to look up and create jobs.
+                    if await self._create(request=request):
+                        return
+                    # Another instance created the job first: look at what it created
+                    continue
+                if not self._job_changed(job=existing, request=request):
+                    return
+
             # Delete and create job
             await self.delete()
-            client = await self.client_provider.get()
+            if await self._create(request=request):
+                return
+            # Another instance recreated the job between our delete and our create.
+            # With force we just try again, since force never reads the job. Otherwise
+            # do not assume its job matches ours: compare on the next round.
+            replace = self.force
+
+        if not self.force:
+            # Out of attempts, but the job that won the last race may be the one we wanted
+            existing = await self._existing_job(request=request)
+            if existing is not None and not self._job_changed(job=existing, request=request):
+                return
+        raise self._never_settled(request=request)
+
+    async def _create(self, request: scheduler_v1.CreateJobRequest) -> bool:
+        """Create the job. Returns False if another instance created it first."""
+        client = await self.client_provider.get()
+        try:
             await client.create_job(request=request, timeout=self.job_create_timeout)
+        except AlreadyExists:
+            return False
+        return True
 
-    async def _has_changed(self, request: scheduler_v1.CreateJobRequest) -> bool:
+    async def _existing_job(self, request: scheduler_v1.CreateJobRequest) -> scheduler_v1.Job | None:
+        client = await self.client_provider.get()
         try:
-            client = await self.client_provider.get()
-            job = await client.get_job(name=request.job.name)
-            return self._job_changed(job=job, request=request)
-        # TODO: replace this with a more specific exception
-        except Exception:  # noqa: BLE001
-            return True
+            return await client.get_job(name=request.job.name)
+        except NotFound:
+            return None
 
-    async def delete(self) -> bool | Exception:
-        """Delete the job from the scheduler if it exists."""
-        # We return true or exception because you could have the delete code on multiple instances
+    async def delete(self) -> bool:
+        """
+        Delete the job from the scheduler.
+
+        Returns True if the job was deleted and False if it did not exist, so it is safe
+        to call from several instances at once. Any other error is raised.
+        """
+        client = await self.client_provider.get()
         try:
-            client = await self.client_provider.get()
             await client.delete_job(name=self.job_id, timeout=self.job_create_timeout)
-            return True
-        # TODO: replace this with a more specific exception. we may also just raise the exception here?
-        except Exception as ex:  # noqa: BLE001
-            return ex
+        except NotFound:
+            return False
+        return True

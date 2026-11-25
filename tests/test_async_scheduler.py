@@ -5,9 +5,10 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 # Third Party Imports
+import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import AlreadyExists, NotFound, PermissionDenied
 from google.cloud import scheduler_v1
 
 # Imports from this repository
@@ -68,10 +69,98 @@ class TestAsyncScheduler:
         await scheduler.schedule()
 
         client.create_job.assert_awaited_once()
+        client.delete_job.assert_not_awaited()
         request = client.create_job.await_args.kwargs["request"]
         assert request.parent == LOCATION_PATH
         assert request.job.name == f"{LOCATION_PATH}/jobs/test-job"
         assert request.job.schedule == "*/5 * * * *"
+
+    async def test_first_time_scheduling_does_not_delete(self) -> None:
+        """Creating a job that does not exist must work without permission to delete jobs."""
+        client = _mock_async_client()
+        client.delete_job = AsyncMock(side_effect=PermissionDenied("nope"))
+        scheduler = _make_scheduler(client)
+
+        await scheduler.schedule()
+
+        client.delete_job.assert_not_awaited()
+        client.create_job.assert_awaited_once()
+
+    async def test_concurrent_create_of_the_same_job_is_not_an_error(self) -> None:
+        """Two instances starting together: the one that loses the create race accepts the other's job."""
+        client = _mock_async_client()
+        scheduler = _make_scheduler(client)
+        created_elsewhere = scheduler_v1.Job(scheduler._build_create_job_request(values={}).job)
+        client.get_job = AsyncMock(side_effect=[NotFound("no job"), created_elsewhere])
+        client.create_job = AsyncMock(side_effect=AlreadyExists("created by another instance"))
+
+        await scheduler.schedule()
+
+        client.create_job.assert_awaited_once()
+        client.delete_job.assert_not_awaited()
+
+    async def test_losing_the_replace_race_to_a_different_job_replaces_it_again(self) -> None:
+        """The competing job is compared, not assumed to match, so a different one is replaced."""
+        client = _mock_async_client()
+        scheduler = _make_scheduler(client)
+        client.get_job = AsyncMock(
+            side_effect=[
+                scheduler_v1.Job(name=scheduler.job_id, schedule="0 0 * * *"),
+                scheduler_v1.Job(name=scheduler.job_id, schedule="0 12 * * *"),
+            ]
+        )
+        client.create_job = AsyncMock(side_effect=[AlreadyExists("recreated by another instance"), scheduler_v1.Job()])
+
+        await scheduler.schedule()
+
+        assert client.delete_job.await_count == 2
+        assert client.create_job.await_count == 2
+
+    async def test_losing_the_last_attempt_to_the_same_job_is_not_an_error(self) -> None:
+        """Running out of attempts is only a failure if the job that finally won differs from ours."""
+        client = _mock_async_client()
+        scheduler = _make_scheduler(client)
+        ours = scheduler_v1.Job(scheduler._build_create_job_request(values={}).job)
+        client.get_job = AsyncMock(
+            side_effect=[
+                scheduler_v1.Job(name=scheduler.job_id, schedule="0 0 * * *"),
+                scheduler_v1.Job(name=scheduler.job_id, schedule="0 6 * * *"),
+                scheduler_v1.Job(name=scheduler.job_id, schedule="0 12 * * *"),
+                ours,
+            ]
+        )
+        client.create_job = AsyncMock(side_effect=AlreadyExists("recreated by another instance"))
+
+        await scheduler.schedule()
+
+        assert client.create_job.await_count == 3
+
+    async def test_force_retries_without_reading_the_job(self) -> None:
+        """Force never reads the job, so recovering from a lost race must not need lookup permission either."""
+        client = _mock_async_client()
+        client.get_job = AsyncMock(side_effect=PermissionDenied("nope"))
+        client.create_job = AsyncMock(side_effect=[AlreadyExists("recreated by another instance"), scheduler_v1.Job()])
+        scheduler = _make_scheduler(client, force=True)
+
+        await scheduler.schedule()
+
+        client.get_job.assert_not_awaited()
+        assert client.delete_job.await_count == 2
+        assert client.create_job.await_count == 2
+
+    async def test_a_job_that_never_settles_raises(self) -> None:
+        """If another process keeps winning with a different job, fail loudly instead of reporting success."""
+        client = _mock_async_client()
+        scheduler = _make_scheduler(client)
+        client.get_job = AsyncMock(
+            side_effect=lambda **_: scheduler_v1.Job(name=scheduler.job_id, schedule="0 0 * * *")
+        )
+        client.create_job = AsyncMock(side_effect=AlreadyExists("recreated by another instance"))
+
+        with pytest.raises(AlreadyExists, match="different definition"):
+            await scheduler.schedule()
+
+        assert client.create_job.await_count == 3
 
     async def test_schedule_skips_unchanged_job(self) -> None:
         """An identical existing job should not be recreated."""
@@ -117,14 +206,62 @@ class TestAsyncScheduler:
         assert await scheduler.delete() is True
         client.delete_job.assert_awaited_once_with(name=scheduler.job_id, timeout=scheduler.job_create_timeout)
 
-    async def test_delete_returns_exception_on_failure(self) -> None:
-        """delete() should return the exception when the RPC fails."""
+    async def test_delete_returns_false_when_job_is_missing(self) -> None:
+        """delete() should return False, not an exception, when there is nothing to delete."""
         client = _mock_async_client()
         client.delete_job = AsyncMock(side_effect=NotFound("no job"))
         scheduler = _make_scheduler(client)
 
-        result = await scheduler.delete()
-        assert isinstance(result, NotFound)
+        assert await scheduler.delete() is False
+
+    async def test_delete_raises_unexpected_errors(self) -> None:
+        """Anything other than "not found" is a real failure and must not be swallowed."""
+        client = _mock_async_client()
+        client.delete_job = AsyncMock(side_effect=PermissionDenied("nope"))
+        scheduler = _make_scheduler(client)
+
+        with pytest.raises(PermissionDenied):
+            await scheduler.delete()
+
+    async def test_schedule_raises_when_existing_job_cannot_be_read(self) -> None:
+        """A failed lookup is not "the job changed": do not delete and recreate on a guess."""
+        client = _mock_async_client()
+        client.get_job = AsyncMock(side_effect=PermissionDenied("nope"))
+        scheduler = _make_scheduler(client)
+
+        with pytest.raises(PermissionDenied):
+            await scheduler.schedule()
+
+        client.delete_job.assert_not_awaited()
+        client.create_job.assert_not_awaited()
+
+    async def test_schedule_binds_arguments_before_any_rpc(self) -> None:
+        """Positional arguments are bound, and unknown ones fail before a job is touched."""
+        client = _mock_async_client()
+        router = APIRouter(
+            route_class=AsyncScheduledRouteBuilder(
+                base_url=BASE_URL,
+                location_path=LOCATION_PATH,
+                client=client,
+            )
+        )
+
+        @router.post("/pretzel_day/{branch_name}")
+        @as_async_scheduled_task
+        async def pretzel_day(branch_name: str, topping: str | None = None) -> None:
+            """Endpoint under test."""
+
+        await pretzel_day.scheduler(name="pretzel-day", schedule="0 9 * * 5").schedule("Scranton PA", "salt")
+        job = client.create_job.await_args.kwargs["request"].job
+        assert job.http_target.uri == f"{BASE_URL}/pretzel_day/Scranton%20PA?topping=salt"
+
+        client.reset_mock()
+        with pytest.raises(TypeError, match="toping"):
+            await pretzel_day.scheduler(name="pretzel-day", schedule="0 9 * * 5").schedule(  # type: ignore[call-arg]
+                "Scranton", toping="salt"
+            )
+        client.get_job.assert_not_awaited()
+        client.create_job.assert_not_awaited()
 
     async def test_factory_resolved_lazily_once(self) -> None:
         """A client factory should only be called on first use, exactly once."""
