@@ -1,8 +1,8 @@
 # Standard Library Imports
 import inspect
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import lru_cache, partial
 from http.cookies import SimpleCookie
 from types import UnionType
 from typing import Annotated, Any, Union, get_args, get_origin
@@ -385,21 +385,32 @@ def _accepts_none(annotation: Any) -> bool:
     return False
 
 
-def _require_deliverable(value: Any, *, location: str, name: str, required: bool, default: Any) -> None:
+def _require_deliverable(
+    value: Any, *, location: str, name: str, required: bool, get_default: Callable[[], Any]
+) -> None:
     """
     Reject an empty collection the worker would not receive as empty.
 
     An empty collection has no representation in a URL or header: the key is simply
     absent, so the worker falls back to its own default. That is only the same value
-    when the default is empty too.
+    when the default is empty too. The default is only resolved in that case, so
+    default factories do not run for values that can be sent as they are.
     """
     if not isinstance(value, _COLLECTIONS) or value:
         return
+    default = None if required else get_default()
     if required or not isinstance(default, _COLLECTIONS) or default:
         outcome = "reject the request" if required else f"use its default ({default!r})"
         raise ValueError(
             f"{location} parameter {name!r} cannot be sent as an empty collection: the worker would {outcome} instead"
         )
+
+
+def _model_field_default(info: Any, model: BaseModel) -> Any:
+    if getattr(info, "default_factory_takes_validated_data", False):
+        # A factory that computes its default from the model's other fields
+        return info.get_default(call_default_factory=True, validated_data=dict(model))
+    return info.get_default(call_default_factory=True)
 
 
 def _expand_model(param: _Param, value: Any, *, location: str, header: bool = False) -> list[tuple[str, Any]]:
@@ -410,13 +421,12 @@ def _expand_model(param: _Param, value: Any, *, location: str, header: bool = Fa
         item = getattr(value, name)
         if item is None:
             continue
-        required = info.is_required()
         _require_deliverable(
             item,
             location=location,
             name=f"{param.name}.{name}",
-            required=required,
-            default=None if required else info.get_default(call_default_factory=True),
+            required=info.is_required(),
+            get_default=partial(_model_field_default, info, value),
         )
         validation_alias = info.validation_alias
         key = validation_alias if isinstance(validation_alias, str) and validation_alias else (info.alias or name)
@@ -437,13 +447,12 @@ def _resolve(param: _Param, values: dict[str, Any], *, location: str) -> Any:
         # None is "not provided" for every non-body location: never send the text "None"
         return param.field.get_default()
     value = _validate(param.field, value, loc=(location, param.wire))
-    required = param.field.field_info.is_required()
     _require_deliverable(
         value,
         location=location,
         name=param.name,
-        required=required,
-        default=None if required else param.field.get_default(),
+        required=param.field.field_info.is_required(),
+        get_default=param.field.get_default,
     )
     return value
 

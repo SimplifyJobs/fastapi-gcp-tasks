@@ -793,6 +793,36 @@ class TestNullAndNonFiniteBodies:
         assert bytes(http.body) == json.dumps(jsonable_encoder(person)).encode()
 
 
+def test_param_model_default_factories_are_not_called_for_supplied_fields() -> None:
+    """A default is only looked at for an empty collection, so a data-dependent factory never runs needlessly."""
+
+    class Window(BaseModel):
+        start: int = 0
+        end: int = Field(default_factory=lambda data: data["start"] + 10)
+        tags: list[str] = Field(default_factory=lambda data: [f"from-{data['start']}"])
+
+    model_router = APIRouter(
+        route_class=DelayedRouteBuilder(
+            client=client,
+            callback_base_url="https://worker.example.com",
+            queue_path=QUEUE_PATH,
+            auto_create_queue=False,
+        )
+    )
+
+    @model_router.post("/window")
+    @as_delayed_task
+    def window(window: Annotated[Window, Query()]) -> None:
+        """Task with a parameter model whose defaults depend on other fields."""
+
+    http = _http(window.delay(window=Window(start=1, end=5, tags=["chili"])))
+    assert _query(http) == [("start", "1"), ("end", "5"), ("tags", "chili")]
+
+    # An empty list still has to be compared with the default, which needs the other fields
+    with pytest.raises(ValueError, match="window.tags"):
+        window.delay(window=Window(start=1, end=5, tags=[]))
+
+
 def test_optional_query_param_model_is_expanded() -> None:
     """``Filters | None`` is still a parameter model and must be expanded, not stringified."""
 

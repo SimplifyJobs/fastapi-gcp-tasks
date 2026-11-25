@@ -95,6 +95,13 @@ app.include_router(task_router, prefix="/tasks")
 audience remains the service URL; it does not need the callback path prefix. The same rule applies to the
 async and scheduled route builders.
 
+### Query parameters on the callback URL
+
+`callback_base_url` may carry its own query string, for example `https://worker.example.com/tasks?tenant=dm`.
+Those parameters are sent with every task. A task argument with the same name replaces them whenever it sends a
+value or is passed explicitly, including an explicit empty list. An argument you leave out whose default is
+`None` or empty sends nothing, so the callback URL's value stays in place.
+
 ## AsyncDelayedRouteBuilder
 
 Same options as `DelayedRouteBuilder`, with two differences:
