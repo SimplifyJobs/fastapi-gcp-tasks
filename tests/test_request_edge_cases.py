@@ -302,6 +302,13 @@ def loose_int(n: float) -> dict[str, Any]:
     return {"n": n}
 
 
+@router.post("/decimal_float/{x:float}")
+@as_delayed_task
+def decimal_float(x: Decimal) -> dict[str, Any]:
+    """A float segment whose parameter is typed as a Decimal."""
+    return {"x": str(x)}
+
+
 @router.post("/alias695_identity")
 @as_delayed_task
 def alias695_identity(item: Item, note: Annotated[Identity[str | None], Body()] = "keep") -> dict[str, Any]:
@@ -438,6 +445,18 @@ class TestTypedPathSegments:
         http = _http(padded.delay(n=5))
         assert urlsplit(http.url).path == "/padded/0005"
         assert replay(app, http) == (200, {"n": 5})
+
+    def test_whole_number_float_fits_an_int_segment(self) -> None:
+        """5.0 is exactly 5, so the int segment can carry it."""
+        http = _http(loose_int.delay(n=5.0))
+        assert urlsplit(http.url).path == "/loose_int/5"
+        assert replay(app, http) == (200, {"n": 5.0})
+
+    def test_decimal_on_a_float_segment(self) -> None:
+        """A Decimal is a number too: it is written in plain notation, not left as "1E-7"."""
+        http = _http(decimal_float.delay(x=Decimal("1E-7")))
+        assert urlsplit(http.url).path == "/decimal_float/0.0000001"
+        assert replay(app, http) == (200, {"x": "1E-7"})
 
     def test_fraction_is_not_truncated_into_an_int_segment(self) -> None:
         """1.5 must not become "/1": the segment cannot carry it, so fail at the call site."""

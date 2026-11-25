@@ -3,7 +3,7 @@ import inspect
 import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from functools import lru_cache, partial
 from http.cookies import SimpleCookie
 from types import UnionType
@@ -388,19 +388,20 @@ def _path_segment(path_param: _PathParam, value: Any) -> str:
     # A typed segment matches one canonical form only (no sign, no exponent), and the convertor
     # itself knows how to write it. That includes convertors an application registered.
     is_int = isinstance(value, int) and not isinstance(value, bool)
-    is_number = is_int or isinstance(value, float)
+    is_number = is_int or isinstance(value, (float, Decimal))
     try:
         if isinstance(convertor, IntegerConvertor):
-            if is_int:
-                # Not for a fraction: to_string would truncate 1.5 to "1"
-                segment = convertor.to_string(value)
+            if is_number and value == int(value):
+                # Only a whole number: to_string would truncate 1.5 to "1"
+                segment = convertor.to_string(int(value))
         elif isinstance(convertor, FloatConvertor) and is_number:
-            segment = convertor.to_string(value)
-            if type(convertor) is FloatConvertor and float(segment) != float(value):
+            number = float(value)
+            segment = convertor.to_string(number)
+            if type(convertor) is FloatConvertor and float(segment) != number:
                 # Starlette keeps 20 decimal places, which rounds small values
-                segment = _plain_float(float(value))
-    except (AssertionError, TypeError, ValueError, InvalidOperation):
-        pass  # not representable: the pattern check below reports it
+                segment = _plain_float(number)
+    except (AssertionError, ArithmeticError, TypeError, ValueError):
+        pass  # not representable (negative, infinite, not a number): the pattern check below reports it
     if not path_param.pattern.fullmatch(segment):
         # ASGI servers decode %2F before routing, so percent-encoding cannot rescue a value
         # the segment does not match: the request would hit a 404 or a different route.
