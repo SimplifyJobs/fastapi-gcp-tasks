@@ -31,9 +31,13 @@ These can require action when upgrading:
   header or cookie parameter whose default is not also empty.
 - **Cookie parameters are sent in the standard `Cookie` header.** They used to be sent in a `Cookies` header that
   FastAPI does not read.
+- **Headers the task request sets itself cannot be passed.** A value for an `X-CloudTasks-*` or
+  `X-CloudScheduler*` header, or for `Content-Type`, raises `TypeError`; it used to be dropped silently. A
+  `SecretStr` outside the body raises `ValueError`, because Pydantic would send its mask.
 - **Some scheduled jobs are recreated once after upgrading.** `.schedule()` sees a job as changed the first time
   if its request is now built differently: omitted optional query parameters (no longer in the URL), list, enum
-  and boolean query values, cookie parameters (now in `Cookie`), and path values that need percent-encoding.
+  and boolean query values, cookie parameters (now in `Cookie`), path values that need percent-encoding, routes
+  with a trailing slash, and Decimal or duration values outside a model body.
 
 ### Fixed
 
@@ -46,6 +50,19 @@ These can require action when upgrading:
   ones were dropped.
 - Path parameter values are percent-encoded, so a space, `?` or `#` in a value can no longer break the URL or
   inject query parameters.
+- A trailing slash in a route (`"/send_email/"`) or in a `{name:path}` value is kept. It used to be stripped, so
+  the worker answered with a redirect or a 404.
+- Decimals and durations are sent in a form Pydantic parses back exactly, in every location. Outside a model
+  body, Decimals used to go through `float`, and a duration in a URL, header or cookie was rejected by the worker.
+- Bodies that are not a single model (lists, dicts, scalars next to a model) are serialized like model bodies.
+- `TypedDict` bodies, an `int` for a `float` body parameter and a generic model built without its type argument
+  are accepted. They used to fail the argument check.
+- `{x:float}` path segments are written in plain notation, and a value a typed segment cannot match, such as a
+  negative number for `{n:int}`, raises `ValueError` instead of producing a URL that 404s.
+- A scheduled job that a `pre_create_hook` renames is replaced under its new name. The original name used to be
+  deleted instead.
+- A per-call `callback_base_url` or `base_url` replaces an endpoint default given under the other name instead
+  of raising, and query parameters without a value on the callback URL are kept.
 - Endpoints with several body parameters, or with `Body(embed=True)`, now work. They used to raise
   `field required: body`.
 - Query, header and cookie parameter models (a Pydantic model grouping several parameters) are expanded into
@@ -71,7 +88,7 @@ These can require action when upgrading:
 ### Performance
 
 - Pydantic model bodies are no longer walked a second time in Python after pydantic-core has dumped them, and the
-  request layout for each route is computed once. The JSON is the same, with one exception: dictionary keys
-  starting with `_sa` are no longer stripped (a SQLAlchemy safeguard in `jsonable_encoder`). Client-side time per
-  `.delay()` for a 50-item order model drops from about 150µs to about 50µs; a small payload goes from about 27µs
-  to about 23µs.
+  request layout for each route is computed once. The JSON of a model body is the same, with one exception:
+  dictionary keys starting with `_sa` are no longer stripped (a SQLAlchemy safeguard in `jsonable_encoder`).
+  Client-side time per `.delay()` for a 50-item order model drops from about 150µs to under 50µs; a small payload
+  goes from about 27µs to about 20µs.

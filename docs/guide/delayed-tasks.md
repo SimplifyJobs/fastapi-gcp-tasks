@@ -56,8 +56,8 @@ Each argument is sent the way FastAPI will read it back on the worker:
 
 | Endpoint parameter | Sent as |
 | --- | --- |
-| Path parameter | Percent-encoded path segment. |
-| Query parameter | Query string. Lists repeat the key, enums send their value, dates use ISO 8601. |
+| Path parameter | Percent-encoded path segment. A trailing slash in the route or in a `{name:path}` value is kept. |
+| Query parameter | Query string. Lists repeat the key, enums send their value, dates and durations use ISO 8601, Decimals keep their digits. |
 | `Header()` parameter | Request header. Pass it by its Python name: `x_request_id="..."` is sent as `x-request-id`. A list header can carry one value, because a task request sends each header once. |
 | `Cookie()` parameter | `Cookie` request header. |
 | One Pydantic body | The JSON body. |
@@ -72,16 +72,31 @@ A few rules keep mistakes at the call site instead of on the worker:
   unless the endpoint's own default is also empty, in which case the key is simply left out. The same applies
   to list fields of a parameter model. A cookie cannot carry a list at all, since it holds a single value.
 - **Unknown arguments raise `TypeError`**, as they would in a normal function call. So does a value for an
-  argument the worker resolves itself, such as `db: Session = Depends(get_db)`.
+  argument the worker resolves itself, such as `db: Session = Depends(get_db)`, and a value for a header the
+  task request sets itself: the `X-CloudTasks-*` and `X-CloudScheduler*` headers, and `Content-Type`, which is
+  always `application/json`.
 - **Values are validated** against the endpoint's annotations before the task is created. A missing required
-  argument raises `MissingParamError`; a path value that is empty or contains `/` raises `ValueError` (declare
-  the segment as `{name:path}` to allow slashes).
+  argument raises `MissingParamError`. A path value the route segment would not match raises `ValueError`: an
+  empty value or one containing `/` for a plain `{name}` segment (declare it as `{name:path}` to allow
+  slashes), or a negative number for `{n:int}`.
 - **Query, header and cookie parameters owned by a dependency are optional here.** If `Depends(verify_token)`
   reads an `Authorization` header, `.delay()` does not ask for it, because a [hook](hooks-and-dependencies.md)
   or Cloud Tasks' own OIDC token usually supplies it. You can still pass such a parameter by name when you need
   to. Body parameters are different: the JSON body is one document only the caller can supply, so a required
   body parameter is required wherever it is declared.
 - **`Form()` and `File()` parameters are not supported.** Task bodies are always sent as JSON.
+
+### Limits
+
+- **Secrets.** Pydantic masks a `SecretStr` when it is serialized. Outside the body, passing one raises
+  `ValueError`; inside a body the worker receives the mask. Keep secrets out of task arguments.
+- **Validators run on both sides.** Path, query, header and cookie values are validated before sending and
+  again on the worker, so a validator that is not idempotent, such as one that adds a prefix, is applied twice.
+- **Sets inside a body are sent in iteration order**, which can differ between processes. For a scheduled job
+  that makes the job look changed after a restart, so prefer a list or tuple in scheduled payloads.
+- **A body model must accept its own dump.** Models are sent as `model_dump(mode="json", by_alias=True)`, so a
+  field with only a `serialization_alias`, a computed field on a model that forbids extra fields, or a
+  `Json[...]` field is rejected by the worker.
 
 ## Per-endpoint defaults
 
