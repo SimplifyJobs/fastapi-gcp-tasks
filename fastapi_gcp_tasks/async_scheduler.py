@@ -56,9 +56,9 @@ class AsyncScheduler(BaseScheduler):
         )
         self.client_provider = client_provider
 
-    async def schedule(self, **kwargs: Any) -> None:
-        """Schedule a job on Cloud Scheduler without blocking the event loop."""
-        request = self._build_create_job_request(values=kwargs)
+    async def schedule(self, *args: Any, **kwargs: Any) -> None:
+        """Schedule a job on Cloud Scheduler without blocking the event loop. Takes the same arguments as the endpoint."""
+        request = self._build_create_job_request(values=self._bind(args, kwargs))
 
         if self.force or await self._has_changed(request=request):
             # Delete and create job

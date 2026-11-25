@@ -87,8 +87,9 @@ class AsyncDelayer(BaseDelayer):
         )
         self.client_provider = client_provider
 
-    async def delay(self, **kwargs: Any) -> tasks_v2.Task:
-        """Delay a task on Cloud Tasks without blocking the event loop."""
+    async def delay(self, *args: Any, **kwargs: Any) -> tasks_v2.Task:
+        """Delay a task on Cloud Tasks without blocking the event loop. Takes the same arguments as the endpoint."""
+        # Bind and build first so bad arguments fail before any RPC is made
+        request = self._build_create_task_request(values=self._bind(args, kwargs))
         client = await self.client_provider.get_for_queue(queue_path=self.queue_path)
-        request = self._build_create_task_request(values=kwargs)
         return await client.create_task(request=request, timeout=self.task_create_timeout)

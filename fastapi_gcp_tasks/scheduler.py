@@ -161,9 +161,9 @@ class Scheduler(BaseScheduler):
         )
         self.client = client
 
-    def schedule(self, **kwargs: Any) -> None:
-        """Schedule a job on Cloud Scheduler."""
-        request = self._build_create_job_request(values=kwargs)
+    def schedule(self, *args: Any, **kwargs: Any) -> None:
+        """Schedule a job on Cloud Scheduler. Takes the same arguments as the endpoint."""
+        request = self._build_create_job_request(values=self._bind(args, kwargs))
 
         if self.force or self._has_changed(request=request):
             # Delete and create job

@@ -1,15 +1,12 @@
 # Standard Library Imports
 from collections.abc import Callable, Mapping
-from typing import ParamSpec, Protocol, TypedDict, TypeVar, Unpack, cast
+from typing import Protocol, TypedDict, Unpack, cast
 
 # Third Party Imports
 from google.cloud import scheduler_v1, tasks_v2
 
 # Imports from this repository
 from fastapi_gcp_tasks.hooks import DelayedTaskHook, ScheduledHook
-
-P = ParamSpec("P")
-R = TypeVar("R", covariant=True)
 
 
 class TaskDefaultOptions(TypedDict, total=False):
@@ -81,27 +78,27 @@ def ensure_known_options(options: Mapping[str, object], allowed: type) -> None:
         raise TypeError(f"Unknown option(s) for {allowed.__name__}: {', '.join(sorted(unexpected))}")
 
 
-class DelayerHandle(Protocol[P]):
+class DelayerHandle[**P](Protocol):
     """A configured delayer bound to an endpoint's signature."""
 
     def delay(self, *args: P.args, **kwargs: P.kwargs) -> tasks_v2.Task:
-        """Create the task on Cloud Tasks. Call with keyword arguments matching the endpoint."""
+        """Create the task on Cloud Tasks. Takes the same arguments as the endpoint."""
         ...
 
 
-class AsyncDelayerHandle(Protocol[P]):
+class AsyncDelayerHandle[**P](Protocol):
     """A configured async delayer bound to an endpoint's signature."""
 
     async def delay(self, *args: P.args, **kwargs: P.kwargs) -> tasks_v2.Task:
-        """Create the task on Cloud Tasks. Call with keyword arguments matching the endpoint."""
+        """Create the task on Cloud Tasks. Takes the same arguments as the endpoint."""
         ...
 
 
-class SchedulerHandle(Protocol[P]):
+class SchedulerHandle[**P](Protocol):
     """A configured scheduler bound to an endpoint's signature."""
 
     def schedule(self, *args: P.args, **kwargs: P.kwargs) -> None:
-        """Create (or update) the job on Cloud Scheduler. Call with keyword arguments matching the endpoint."""
+        """Create (or update) the job on Cloud Scheduler. Takes the same arguments as the endpoint."""
         ...
 
     def delete(self) -> bool | Exception:
@@ -109,11 +106,11 @@ class SchedulerHandle(Protocol[P]):
         ...
 
 
-class AsyncSchedulerHandle(Protocol[P]):
+class AsyncSchedulerHandle[**P](Protocol):
     """A configured async scheduler bound to an endpoint's signature."""
 
     async def schedule(self, *args: P.args, **kwargs: P.kwargs) -> None:
-        """Create (or update) the job on Cloud Scheduler. Call with keyword arguments matching the endpoint."""
+        """Create (or update) the job on Cloud Scheduler. Takes the same arguments as the endpoint."""
         ...
 
     async def delete(self) -> bool | Exception:
@@ -121,7 +118,7 @@ class AsyncSchedulerHandle(Protocol[P]):
         ...
 
 
-class DelayedTask(Protocol[P, R]):
+class DelayedTask[**P, R](Protocol):
     """
     Typed view of an endpoint registered on a DelayedRouteBuilder route.
 
@@ -135,7 +132,7 @@ class DelayedTask(Protocol[P, R]):
         ...
 
     def delay(self, *args: P.args, **kwargs: P.kwargs) -> tasks_v2.Task:
-        """Trigger the task on Cloud Tasks. Call with keyword arguments matching the endpoint."""
+        """Trigger the task on Cloud Tasks. Takes the same arguments as the endpoint."""
         ...
 
     def options(self, **options: Unpack[DelayOptions]) -> DelayerHandle[P]:
@@ -143,7 +140,7 @@ class DelayedTask(Protocol[P, R]):
         ...
 
 
-class AsyncDelayedTask(Protocol[P, R]):
+class AsyncDelayedTask[**P, R](Protocol):
     """
     Typed view of an endpoint registered on an AsyncDelayedRouteBuilder route.
 
@@ -156,7 +153,7 @@ class AsyncDelayedTask(Protocol[P, R]):
         ...
 
     async def delay(self, *args: P.args, **kwargs: P.kwargs) -> tasks_v2.Task:
-        """Trigger the task on Cloud Tasks. Call with keyword arguments matching the endpoint."""
+        """Trigger the task on Cloud Tasks. Takes the same arguments as the endpoint."""
         ...
 
     def options(self, **options: Unpack[AsyncDelayOptions]) -> AsyncDelayerHandle[P]:
@@ -164,7 +161,7 @@ class AsyncDelayedTask(Protocol[P, R]):
         ...
 
 
-class ScheduledTask(Protocol[P, R]):
+class ScheduledTask[**P, R](Protocol):
     """
     Typed view of an endpoint registered on a ScheduledRouteBuilder route.
 
@@ -181,7 +178,7 @@ class ScheduledTask(Protocol[P, R]):
         ...
 
 
-class AsyncScheduledTask(Protocol[P, R]):
+class AsyncScheduledTask[**P, R](Protocol):
     """
     Typed view of an endpoint registered on an AsyncScheduledRouteBuilder route.
 
@@ -200,7 +197,7 @@ class AsyncScheduledTask(Protocol[P, R]):
         ...
 
 
-def as_delayed_task(fn: Callable[P, R]) -> DelayedTask[P, R]:
+def as_delayed_task[**P, R](fn: Callable[P, R]) -> DelayedTask[P, R]:
     """
     Identity cast that types an endpoint as a DelayedTask.
 
@@ -219,16 +216,16 @@ def as_delayed_task(fn: Callable[P, R]) -> DelayedTask[P, R]:
     return cast(DelayedTask[P, R], fn)
 
 
-def as_async_delayed_task(fn: Callable[P, R]) -> AsyncDelayedTask[P, R]:
+def as_async_delayed_task[**P, R](fn: Callable[P, R]) -> AsyncDelayedTask[P, R]:
     """Identity cast that types an endpoint as an AsyncDelayedTask. See ``as_delayed_task``."""
     return cast(AsyncDelayedTask[P, R], fn)
 
 
-def as_scheduled_task(fn: Callable[P, R]) -> ScheduledTask[P, R]:
+def as_scheduled_task[**P, R](fn: Callable[P, R]) -> ScheduledTask[P, R]:
     """Identity cast that types an endpoint as a ScheduledTask. See ``as_delayed_task``."""
     return cast(ScheduledTask[P, R], fn)
 
 
-def as_async_scheduled_task(fn: Callable[P, R]) -> AsyncScheduledTask[P, R]:
+def as_async_scheduled_task[**P, R](fn: Callable[P, R]) -> AsyncScheduledTask[P, R]:
     """Identity cast that types an endpoint as an AsyncScheduledTask. See ``as_delayed_task``."""
     return cast(AsyncScheduledTask[P, R], fn)
