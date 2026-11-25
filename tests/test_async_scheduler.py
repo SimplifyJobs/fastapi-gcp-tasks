@@ -69,10 +69,22 @@ class TestAsyncScheduler:
         await scheduler.schedule()
 
         client.create_job.assert_awaited_once()
+        client.delete_job.assert_not_awaited()
         request = client.create_job.await_args.kwargs["request"]
         assert request.parent == LOCATION_PATH
         assert request.job.name == f"{LOCATION_PATH}/jobs/test-job"
         assert request.job.schedule == "*/5 * * * *"
+
+    async def test_first_time_scheduling_does_not_delete(self) -> None:
+        """Creating a job that does not exist must work without permission to delete jobs."""
+        client = _mock_async_client()
+        client.delete_job = AsyncMock(side_effect=PermissionDenied("nope"))
+        scheduler = _make_scheduler(client)
+
+        await scheduler.schedule()
+
+        client.delete_job.assert_not_awaited()
+        client.create_job.assert_awaited_once()
 
     async def test_schedule_skips_unchanged_job(self) -> None:
         """An identical existing job should not be recreated."""

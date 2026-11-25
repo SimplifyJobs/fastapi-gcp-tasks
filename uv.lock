@@ -480,7 +480,7 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastapi", specifier = ">=0.137.0" },
+    { name = "fastapi", specifier = ">=0.151.0" },
     { name = "google-cloud-scheduler", specifier = ">=2.13.3,<3.0.0" },
     { name = "google-cloud-tasks", specifier = ">=2.21.0,<3.0.0" },
 ]

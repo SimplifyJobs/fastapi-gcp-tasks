@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from http.cookies import SimpleCookie
 from types import UnionType
-from typing import Any, Union, get_args, get_origin
+from typing import Annotated, Any, Union, get_args, get_origin
 from urllib.parse import ParseResult, parse_qsl, quote, urlencode, urlparse, urlunparse
 
 # Third Party Imports
@@ -146,7 +146,9 @@ class Requester:
             value = _resolve(param, values, location="header")
             if value is None:
                 continue
-            pairs = _expand_model(param, value, header=True) if param.is_model else [(param.wire, value)]
+            pairs = (
+                _expand_model(param, value, location="header", header=True) if param.is_model else [(param.wire, value)]
+            )
             for key, item in pairs:
                 header_value = _header_value(key, item)
                 if header_value is not None:
@@ -157,9 +159,13 @@ class Requester:
             value = _resolve(param, values, location="cookie")
             if value is None:
                 continue
-            pairs = _expand_model(param, value) if param.is_model else [(param.wire, value)]
+            pairs = _expand_model(param, value, location="cookie") if param.is_model else [(param.wire, value)]
             # Quote like the stdlib does, so a ";" or "," in a value cannot end it early
-            cookies.extend(f"{key}={_COOKIES.value_encode(_to_wire(item))[1]}" for key, item in pairs)
+            cookies.extend(
+                f"{key}={_COOKIES.value_encode(_to_wire(item))[1]}"
+                for key, item in pairs
+                if not (isinstance(item, _COLLECTIONS) and not item)
+            )
         if cookies:
             headers["Cookie"] = "; ".join(cookies)
 
@@ -195,17 +201,21 @@ class Requester:
             value = _resolve(param, values, location="query")
             if value is None:
                 continue
-            pairs = _expand_model(param, value) if param.is_model else [(param.wire, value)]
+            pairs = _expand_model(param, value, location="query") if param.is_model else [(param.wire, value)]
+            explicit = values.get(param.name) is not None
             for key, item in pairs:
-                set_keys.add(key)
                 if isinstance(item, _COLLECTIONS):
                     elements = [_to_wire(element) for element in item]
                     if isinstance(item, (set, frozenset)):
                         # Sets have no stable order; sort so the same call always builds the same URL
                         elements.sort()
-                    query.extend((key, element) for element in elements)
                 else:
-                    query.append((key, _to_wire(item)))
+                    elements = [_to_wire(item)]
+                if elements or explicit:
+                    # This key replaces the same key on the base url. An omitted argument whose
+                    # default is empty sends nothing, so it leaves the base url's value in place.
+                    set_keys.add(key)
+                query.extend((key, element) for element in elements)
 
         # Note: you might think urljoin is a better solution here, it is not.
         base = _parse_base_url(self.base_url)
@@ -273,7 +283,13 @@ def _build_plan(route: APIRoute) -> _RoutePlan:
     # The JSON body is one document that only the caller can supply, so every body param
     # is treated as the endpoint's own, even when a dependency declares it
     body = tuple(
-        _Param(name=p.name, wire=p.wire, field=p.field, own=True, nullable=_accepts_none(p.field))
+        _Param(
+            name=p.name,
+            wire=p.wire,
+            field=p.field,
+            own=True,
+            nullable=_accepts_none(p.field.field_info.annotation),
+        )
         for p in collect("body_params", group=False)
     )
     path_fields = collect("path_params", group=False)
@@ -350,12 +366,41 @@ def _is_param_model(field: Any) -> bool:
     return isinstance(annotation, type) and issubclass(annotation, BaseModel)
 
 
-def _accepts_none(field: Any) -> bool:
-    _, errors = field.validate(None, {}, loc=("body",))
-    return not errors
+def _accepts_none(annotation: Any) -> bool:
+    """
+    Whether a parameter annotated this way can hold None.
+
+    Decided from the annotation alone: probing the field with None would run the
+    endpoint's own validators on a value the caller never passed.
+    """
+    if annotation is Any or annotation is object or annotation is None or annotation is type(None):
+        return True
+    origin = get_origin(annotation)
+    if origin is Annotated:
+        return _accepts_none(get_args(annotation)[0])
+    if origin in (Union, UnionType):
+        return any(_accepts_none(member) for member in get_args(annotation))
+    return False
 
 
-def _expand_model(param: _Param, value: Any, *, header: bool = False) -> list[tuple[str, Any]]:
+def _require_deliverable(value: Any, *, location: str, name: str, required: bool, default: Any) -> None:
+    """
+    Reject an empty collection the worker would not receive as empty.
+
+    An empty collection has no representation in a URL or header: the key is simply
+    absent, so the worker falls back to its own default. That is only the same value
+    when the default is empty too.
+    """
+    if not isinstance(value, _COLLECTIONS) or value:
+        return
+    if required or not isinstance(default, _COLLECTIONS) or default:
+        outcome = "reject the request" if required else f"use its default ({default!r})"
+        raise ValueError(
+            f"{location} parameter {name!r} cannot be sent as an empty collection: the worker would {outcome} instead"
+        )
+
+
+def _expand_model(param: _Param, value: Any, *, location: str, header: bool = False) -> list[tuple[str, Any]]:
     """Flatten a parameter model into its individual (wire name, value) params."""
     convert_underscores = header and getattr(param.field.field_info, "convert_underscores", True)
     pairs: list[tuple[str, Any]] = []
@@ -363,6 +408,14 @@ def _expand_model(param: _Param, value: Any, *, header: bool = False) -> list[tu
         item = getattr(value, name)
         if item is None:
             continue
+        required = info.is_required()
+        _require_deliverable(
+            item,
+            location=location,
+            name=f"{param.name}.{name}",
+            required=required,
+            default=None if required else info.get_default(call_default_factory=True),
+        )
         validation_alias = info.validation_alias
         key = validation_alias if isinstance(validation_alias, str) and validation_alias else (info.alias or name)
         if convert_underscores and key == name:
@@ -382,17 +435,14 @@ def _resolve(param: _Param, values: dict[str, Any], *, location: str) -> Any:
         # None is "not provided" for every non-body location: never send the text "None"
         return param.field.get_default()
     value = _validate(param.field, value, loc=(location, param.wire))
-    if isinstance(value, _COLLECTIONS) and not value:
-        # An empty collection has no representation in a URL or header: the key is simply
-        # absent, so the worker would use its own default. Only allow it when that is the same.
-        required = param.field.field_info.is_required()
-        default = None if required else param.field.get_default()
-        if not isinstance(default, _COLLECTIONS) or default:
-            outcome = "reject the request" if required else f"use its default ({default!r})"
-            raise ValueError(
-                f"{location} parameter {param.name!r} cannot be sent as an empty collection: "
-                f"the worker would {outcome} instead"
-            )
+    required = param.field.field_info.is_required()
+    _require_deliverable(
+        value,
+        location=location,
+        name=param.name,
+        required=required,
+        default=None if required else param.field.get_default(),
+    )
     return value
 
 
@@ -435,8 +485,9 @@ def _body_value(param: _Param, values: dict[str, Any]) -> Any:
 def _dump_json(value: Any) -> bytes:
     if isinstance(value, BaseModel):
         # jsonable_encoder does exactly this dump and then walks the result again in Python.
-        # Skipping that second pass keeps the output byte-identical (model_dump_json would
-        # not: it writes non-finite floats as null, which the worker then rejects).
+        # Skipping that second pass produces the same JSON, apart from its SQLAlchemy
+        # safeguard that drops dict keys starting with "_sa". (model_dump_json would not:
+        # it writes non-finite floats as null, which the worker then rejects.)
         return json.dumps(value.model_dump(mode="json", by_alias=True)).encode()
     return json.dumps(jsonable_encoder(value)).encode()
 

@@ -62,7 +62,7 @@ The accepted keys are typed as the [`DelayOptions` TypedDict](../api/protocols.m
 
 ### Routers mounted under an outer prefix
 
-FastAPI 0.137 and later preserve included routers instead of cloning their routes. A route class therefore
+FastAPI preserves included routers instead of cloning their routes. A route class therefore
 knows the path declared on its own router, but it cannot unambiguously infer a prefix added later — especially
 because the same router can be included more than once. Put that externally visible prefix in
 `callback_base_url`:

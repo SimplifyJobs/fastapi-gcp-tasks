@@ -64,6 +64,26 @@ class TestSchedule:
         client.create_job.assert_called_once()
         assert client.create_job.call_args.kwargs["request"].job.name == f"{LOCATION_PATH}/jobs/test-job"
 
+    def test_first_time_scheduling_does_not_delete(self) -> None:
+        """Creating a job that does not exist must work without permission to delete jobs."""
+        client = _mock_client()
+        client.delete_job.side_effect = PermissionDenied("nope")
+
+        _make_scheduler(client).schedule()
+
+        client.delete_job.assert_not_called()
+        client.create_job.assert_called_once()
+
+    def test_force_recreates_without_lookup(self) -> None:
+        """force=True should skip the diff and always delete and recreate."""
+        client = _mock_client()
+
+        _make_scheduler(client, force=True).schedule()
+
+        client.get_job.assert_not_called()
+        client.delete_job.assert_called_once()
+        client.create_job.assert_called_once()
+
     def test_skips_unchanged_job(self) -> None:
         """An identical existing job should not be recreated."""
         client = _mock_client()

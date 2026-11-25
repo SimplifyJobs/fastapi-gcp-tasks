@@ -43,7 +43,7 @@ dependencies = [
     # No upper bound: FastAPI ships a new 0.x release every few days, and a cap makes
     # this package uninstallable next to each one until we cut a release. CI runs the
     # suite against the newest FastAPI on a schedule instead.
-    "fastapi>=0.137.0",
+    "fastapi>=0.151.0",
 ]
 
 [project.urls]

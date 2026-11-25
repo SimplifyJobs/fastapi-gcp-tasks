@@ -23,7 +23,7 @@ Built and maintained by [Simplify](https://simplify.jobs), where we use it for o
 pip install fastapi-gcp-tasks
 ```
 
-Requires Python 3.12+ and FastAPI 0.137+.
+Requires Python 3.12+ and FastAPI 0.151+.
 
 ## Quick look
 
@@ -507,7 +507,7 @@ simple_task.options(countdown=120).delay()
 
 #### Routers mounted under an outer prefix
 
-FastAPI 0.137 and later preserve included routers instead of cloning their routes. A route class therefore knows the
+FastAPI preserves included routers instead of cloning their routes. A route class therefore knows the
 path declared on its own router, but it cannot unambiguously infer a prefix added later—especially because the same
 router can be included more than once. Put that externally visible prefix in `callback_base_url`:
 

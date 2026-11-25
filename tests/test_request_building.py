@@ -20,7 +20,7 @@ from fastapi import APIRouter, Body, Cookie, Depends, FastAPI, Form, Header, Pat
 from fastapi.encoders import jsonable_encoder
 from google.api_core.exceptions import NotFound
 from google.cloud import scheduler_v1, tasks_v2
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field
 
 # Imports from this repository
 from fastapi_gcp_tasks import (
@@ -263,6 +263,13 @@ def nullable_bodies(item: Item, note: Annotated[str | None, Body()] = "keep") ->
 def required_nullable_body(item: Item, note: Annotated[str | None, Body()]) -> dict[str, Any]:
     """Echo a required body param that accepts null."""
     return {"item": item.name, "note": note}
+
+
+@router.post("/stripped")
+@as_delayed_task
+def stripped(note: Annotated[str, BeforeValidator(lambda text: text.strip()), Body(embed=True)]) -> dict[str, Any]:
+    """Echo a body param whose validator only works on strings."""
+    return {"note": note}
 
 
 @router.post("/limits")
@@ -674,6 +681,36 @@ class TestCollections:
         http = _http(list_default_query.options(callback_base_url=f"{CALLBACK_BASE_URL}?ids=5").delay(ids=[]))
         assert _query(http) == []
 
+    def test_omitted_empty_default_keeps_the_base_url_value(self) -> None:
+        """Leaving the argument out sends nothing, so the callback base URL's value still applies."""
+        # The default comes from Query(default_factory=...), which the signature cannot show a type checker
+        http = _http(
+            list_default_query.options(callback_base_url=f"{CALLBACK_BASE_URL}?ids=5").delay()  # type: ignore[call-arg]
+        )
+        assert _query(http) == [("ids", "5")]
+        assert _replay(http) == (200, {"ids": [5]})
+
+    def test_empty_list_inside_a_param_model_is_rejected(self) -> None:
+        """The same rule applies to a field of a parameter model whose default is not empty."""
+
+        class TagFilters(BaseModel):
+            tags: list[str] = ["chili"]
+
+        model_router = APIRouter(
+            route_class=DelayedRouteBuilder(
+                client=client, callback_base_url=CALLBACK_BASE_URL, queue_path=QUEUE_PATH, auto_create_queue=False
+            )
+        )
+
+        @model_router.post("/tagged")
+        @as_delayed_task
+        def tagged(filters: Annotated[TagFilters, Query()]) -> None:
+            """Task with a query-parameter model that has a list field."""
+
+        assert _query(_http(tagged.delay(filters=TagFilters(tags=["salsa"])))) == [("tags", "salsa")]
+        with pytest.raises(ValueError, match="filters.tags"):
+            tagged.delay(filters=TagFilters(tags=[]))
+
     def test_single_item_list_header(self) -> None:
         """A one-item list fits in the single header occurrence a task can send."""
         http = _http(list_header.delay(x_ids=[7]))
@@ -708,6 +745,7 @@ class TestNullAndNonFiniteBodies:
         """Passing None for a nullable param clears it instead of sending the default."""
         http = _http(nullable_bodies.delay(item=Item(name="chili"), note=None))
         assert json.loads(http.body) == {"item": {"name": "chili"}, "note": None}
+        assert _replay(http) == (200, {"item": "chili", "note": None})
 
     def test_omitted_nullable_param_sends_its_default(self) -> None:
         """Leaving the argument out is still different from passing None."""
@@ -719,6 +757,12 @@ class TestNullAndNonFiniteBodies:
         """None is a real value for a required nullable param, not a missing argument."""
         http = _http(required_nullable_body.delay(item=Item(name="chili"), note=None))
         assert json.loads(http.body) == {"item": {"name": "chili"}, "note": None}
+        assert _replay(http) == (200, {"item": "chili", "note": None})
+
+    def test_validators_do_not_run_on_values_the_caller_never_passed(self) -> None:
+        """A validator that only handles strings must not see a None probe while the request is planned."""
+        http = _http(stripped.delay(note="  undercooked onions  "))
+        assert _replay(http) == (200, {"note": "undercooked onions"})
 
     def test_none_for_a_non_nullable_body_still_means_not_provided(self) -> None:
         """A param that cannot be null keeps the old meaning of None."""

@@ -11,7 +11,8 @@ All notable changes to this project are documented here. The format follows
 These can require action when upgrading:
 
 - **Python 3.12 or newer is required** (previously 3.11).
-- **FastAPI 0.137 or newer is required** (previously 0.110).
+- **FastAPI 0.151 or newer is required** (previously 0.110). It is the first release that delivers a JSON `null`
+  body field to the endpoint as `None` instead of treating it as missing.
 - **The upper bounds on FastAPI and Python are gone.** A new FastAPI release no longer needs a matching release of
   this package before the two can be installed together. CI now runs the suite against the newest FastAPI weekly.
 - **`.delay()` and `.schedule()` raise `TypeError` for arguments that cannot be delivered.** That covers names
@@ -23,7 +24,8 @@ These can require action when upgrading:
   ([#119](https://github.com/SimplifyJobs/fastapi-gcp-tasks/issues/119)). They return `True` when the job was
   deleted and `False` when it did not exist. They used to return the exception object instead of raising it.
 - **`.schedule()` raises when the existing job cannot be read.** Any error from the lookup used to be treated as
-  "the job changed", which deleted and recreated the job on a guess. Only "not found" means the job is missing.
+  "the job changed", which deleted and recreated the job on a guess. Only "not found" means the job is missing,
+  and a missing job is created without a delete, so first-time scheduling needs no permission to delete jobs.
 - **Collections that cannot be delivered raise `ValueError`.** That covers a list header with more than one value
   (a task request sends each header once) and an empty list for a query or header parameter whose default is not
   also empty.
@@ -64,6 +66,7 @@ These can require action when upgrading:
 ### Performance
 
 - Pydantic model bodies are no longer walked a second time in Python after pydantic-core has dumped them, and the
-  request layout for each route is computed once. The JSON produced is byte-identical. Client-side time per
+  request layout for each route is computed once. The JSON is the same, with one exception: dictionary keys
+  starting with `_sa` are no longer stripped (a SQLAlchemy safeguard in `jsonable_encoder`). Client-side time per
   `.delay()` for a 50-item order model drops from about 151µs to about 45µs; a small payload goes from about 27µs
   to about 20µs.

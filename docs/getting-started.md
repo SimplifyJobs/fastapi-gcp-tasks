@@ -12,7 +12,7 @@ description: >-
 pip install fastapi-gcp-tasks
 ```
 
-Python 3.12+ and FastAPI 0.137+ are required.
+Python 3.12+ and FastAPI 0.151+ are required.
 
 ## Your first delayed task
 

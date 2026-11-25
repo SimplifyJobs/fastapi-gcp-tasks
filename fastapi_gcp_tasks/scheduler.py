@@ -166,17 +166,25 @@ class Scheduler(BaseScheduler):
         """Schedule a job on Cloud Scheduler. Takes the same arguments as the endpoint."""
         request = self._build_create_job_request(values=self._bind(args, kwargs))
 
-        if self.force or self._has_changed(request=request):
-            # Delete and create job
-            self.delete()
-            self.client.create_job(request=request, timeout=self.job_create_timeout)
+        if not self.force:
+            existing = self._existing_job(request=request)
+            if existing is None:
+                # Nothing to replace, so no delete: first-time scheduling only needs
+                # permission to look up and create jobs.
+                self.client.create_job(request=request, timeout=self.job_create_timeout)
+                return
+            if not self._job_changed(job=existing, request=request):
+                return
 
-    def _has_changed(self, request: scheduler_v1.CreateJobRequest) -> bool:
+        # Delete and create job
+        self.delete()
+        self.client.create_job(request=request, timeout=self.job_create_timeout)
+
+    def _existing_job(self, request: scheduler_v1.CreateJobRequest) -> scheduler_v1.Job | None:
         try:
-            job = self.client.get_job(name=request.job.name)
+            return self.client.get_job(name=request.job.name)
         except NotFound:
-            return True
-        return self._job_changed(job=job, request=request)
+            return None
 
     def delete(self) -> bool:
         """
