@@ -1,8 +1,66 @@
-# FastAPI Cloud Tasks
+# FastAPI GCP Tasks
 
-Strongly typed background tasks with FastAPI and Google Cloud Run, Tasks and Scheduler. This is a fork of [fastapi-gcp-tasks](https://github.com/adori/fastapi-cloud-tasks), updated with new features and bug fixes.
+[![PyPI version](https://img.shields.io/pypi/v/fastapi-gcp-tasks)](https://pypi.org/project/fastapi-gcp-tasks/)
+[![Python versions](https://img.shields.io/pypi/pyversions/fastapi-gcp-tasks)](https://pypi.org/project/fastapi-gcp-tasks/)
+[![Downloads](https://img.shields.io/pypi/dm/fastapi-gcp-tasks)](https://pypi.org/project/fastapi-gcp-tasks/)
+[![CI](https://github.com/SimplifyJobs/fastapi-gcp-tasks/actions/workflows/ci.yml/badge.svg)](https://github.com/SimplifyJobs/fastapi-gcp-tasks/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-online-blue)](https://simplifyjobs.github.io/fastapi-gcp-tasks/)
+[![License](https://img.shields.io/pypi/l/fastapi-gcp-tasks)](LICENSE)
+
+**Strongly typed background tasks and cron jobs for FastAPI**, built on Google Cloud Tasks, Cloud Scheduler and
+Cloud Run. A serverless alternative to Celery workers and Celery beat, with no Redis or RabbitMQ broker to run.
+
+Your tasks are regular FastAPI endpoints. Call `.delay()` to run one later, or `.scheduler()` to run it on a cron
+schedule. Google Cloud makes the HTTP call back to your service, and the queue handles retries and rate limiting.
+
+Built and maintained by [Simplify](https://simplify.jobs), where we use it for our own background jobs.
 
 **📚 Documentation: [simplifyjobs.github.io/fastapi-gcp-tasks](https://simplifyjobs.github.io/fastapi-gcp-tasks/)**
+
+## Installation
+
+```
+pip install fastapi-gcp-tasks
+```
+
+Requires Python 3.12+ and FastAPI 0.137+.
+
+## Quick look
+
+```python
+from fastapi import APIRouter, FastAPI
+from pydantic import BaseModel
+
+from fastapi_gcp_tasks import DelayedRouteBuilder, as_delayed_task
+from fastapi_gcp_tasks.utils import queue_path
+
+delayed_router = APIRouter(
+    route_class=DelayedRouteBuilder(
+        callback_base_url="https://worker.example.com",
+        queue_path=queue_path(project="gcp-project-id", location="us-central1", queue="chili"),
+    )
+)
+
+
+class Recipe(BaseModel):
+    ingredients: list[str]
+
+
+@delayed_router.post("/{branch}/make_chili")
+@as_delayed_task  # optional: lets mypy and pyright check .delay() calls
+def make_chili(branch: str, recipe: Recipe) -> None:
+    ...  # The secret is to undercook the onions.
+
+
+app = FastAPI()
+app.include_router(delayed_router)
+
+# Anywhere in your code: enqueue it now, or 30 minutes from now
+make_chili.delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef", "Undercooked onions"]))
+make_chili.options(countdown=1800).delay(branch="Scranton", recipe=Recipe(ingredients=["Ground beef"]))
+```
+
+Cloud Tasks then calls `POST https://worker.example.com/Scranton/make_chili` with the recipe as the JSON body:
 
 ```mermaid
 sequenceDiagram
@@ -27,12 +85,6 @@ sequenceDiagram
     CloudTasks -->>+ Worker: /hello
     Worker -->>- CloudTasks: 200
 
-```
-
-## Installation
-
-```
-pip install fastapi-gcp-tasks
 ```
 
 ## Key features
@@ -84,7 +136,7 @@ Use `as_async_delayed_task`, `as_scheduled_task`, and `as_async_scheduled_task` 
 Options accepted by `.options()`, `.scheduler()`, and `task_default_options` are typed via `TypedDict`s
 (`DelayOptions`, `SchedulerOptions`, ...), so misspelled or wrongly-typed options are also caught statically.
 
-Note: call `.delay()` and `.schedule()` with keyword arguments — the runtime only accepts keywords.
+`.delay()` and `.schedule()` take the same arguments as the endpoint, by keyword or by position.
 
 ## How it works
 
@@ -97,7 +149,7 @@ delayed_router = APIRouter(route_class=DelayedRouteBuilder(...))
 
 
 class Recipe(BaseModel):
-  ingredients: List[str]
+    ingredients: list[str]
 
 
 @delayed_router.post("/{branch}/make_chili")
@@ -121,6 +173,22 @@ If we want to trigger the task 30 minutes later
 make_chili.options(countdown=1800).delay(...)
 ```
 
+`.delay()` takes the endpoint's own arguments and turns them into the HTTP request the worker receives:
+
+| Endpoint parameter | Sent as |
+| --- | --- |
+| Path parameter | Percent-encoded path segment |
+| Query parameter (scalars, lists, enums, dates) | Query string. Optional parameters you leave out are not sent |
+| `Header()` / `Cookie()` parameter | Request header / `Cookie` header, passed by its Python name (`x_request_id=...`) |
+| One Pydantic body | The JSON body |
+| Several bodies, or `Body(embed=True)` | One JSON object keyed by parameter name |
+
+Arguments are validated before the task is created, and unknown arguments raise `TypeError`, so mistakes fail
+where you call `.delay()` instead of on the worker. Parameters that belong to a dependency (for example an
+`Authorization` header checked by `Depends(...)`) are never required here, since a hook or Cloud Tasks itself
+usually supplies them, but you can pass them by name. `Form()` and `File()` parameters are not supported: task
+bodies are always JSON.
+
 ### Scheduled Task
 
 ```python
@@ -130,7 +198,7 @@ scheduled_router = APIRouter(route_class=ScheduledRouteBuilder(...))
 
 
 class Recipe(BaseModel):
-  ingredients: List[str]
+    ingredients: list[str]
 
 
 @scheduled_router.post("/pretzel_day")
@@ -278,7 +346,7 @@ Important bits of code:
 # For local, we connect to the emulator client
 client = None
 if IS_LOCAL:
- client = emulator_client()
+    client = emulator_client()
 
 # Construct our DelayedRoute class with all relevant settings
 # This can be done once across the entire project
@@ -306,8 +374,10 @@ async def hello(p: Payload = Payload(message="Default")):
 # Define our app and add trigger to it.
 app = FastAPI()
 
+# A plain `def`: the sync `.delay()` makes a blocking gRPC call, so let FastAPI run it
+# in the threadpool. Use AsyncDelayedRouteBuilder to `await .delay()` instead.
 @app.get("/trigger")
-async def trigger():
+def trigger():
     # Trigger the task
     hello.delay(p=Payload(message="Triggered task"))
     return {"message": "Hello task triggered"}
@@ -327,7 +397,7 @@ Running on Cloud Run with authentication needs us to supply an OIDC token. To do
 Pre-requisites:
 
 - Create a task queue. Copy the project id, location and queue name.
-- Deploy the worker as a service on Cloud Run and copy it's URL.
+- Deploy the worker as a service on Cloud Run and copy its URL.
 - Create a service account in cloud IAM and add `Cloud Run Invoker` role to it.
 
 
@@ -339,7 +409,7 @@ DelayedRoute = DelayedRouteBuilder(
     callback_base_url=service_url,
     # Task queue, same as above.
     queue_path=queue_path(...),
-    pre_create_hook=oidc_task_hook(
+    pre_create_hook=oidc_delayed_hook(
         token=tasks_v2.OidcToken(
             # Service account that you created
             service_account_email="fastapi-gcp-tasks@gcp-project-id.iam.gserviceaccount.com",
@@ -351,9 +421,11 @@ DelayedRoute = DelayedRouteBuilder(
 
 Check the fleshed out example at [`examples/full/tasks.py`](examples/full/tasks.py)
 
-If you're not running on CloudRun and want to an OAuth Token instead, you can use the `oauth_task_hook` instead.
+If you're not running on Cloud Run and want an OAuth token instead, use `oauth_delayed_hook` (or
+`oauth_scheduled_hook` for scheduled jobs).
 
-Check [fastapi_cloud_tasks/hooks.py](fastapi_gcp_tasks/hooks.py) to get the hang od hooks and how you can use them.
+The hooks are imported from `fastapi_gcp_tasks.hooks`. See
+[fastapi_gcp_tasks/hooks.py](fastapi_gcp_tasks/hooks.py) to get the hang of hooks and how you can write your own.
 
 ## Configuration
 
@@ -382,6 +454,10 @@ def simple_task():
 - `pre_create_hook` - If you need to edit the `CreateTaskRequest` before sending it to Cloud Tasks (eg: Auth for Cloud Run), you can do that with this hook. See hooks section below for more.
 
 - `client` - If you need to override the Cloud Tasks client, pass the client here. (eg: changing credentials, transport etc)
+
+- `auto_create_queue` - Create the queue if it does not exist when the builder is constructed. Defaults to `True`.
+  Set it to `False` when the queue is managed elsewhere (Terraform, `gcloud`) or when the service account may
+  only enqueue tasks, not create queues.
 
 #### Task level default options
 
@@ -546,7 +622,7 @@ async def my_task(ct_headers: CloudTasksHeaders = Depends()):
     print(ct_headers.queue_name)
 ```
 
-Check the file [fastapi_cloud_tasks/dependencies.py](fastapi_gcp_tasks/dependencies.py) for details.
+Check the file [fastapi_gcp_tasks/dependencies.py](fastapi_gcp_tasks/dependencies.py) for details.
 
 ## Development
 
@@ -578,7 +654,7 @@ make format                # auto-fix
 
 ## License
 
-This project is licensed under the terms of the MIT license. This project was forked from [fastapi-gcp-tasks](https://github.com/Adori/fastapi-cloud-tasks) under the MIT license. All changes made to the original project are also licensed under the MIT license.
+This project is licensed under the terms of the MIT license. It started as a fork of [fastapi-cloud-tasks](https://github.com/Adori/fastapi-cloud-tasks) by Adori, also MIT licensed, and has since added async support, static typing, and many fixes. All changes made to the original project are also licensed under the MIT license.
 
 ## Disclaimer
 

@@ -1,3 +1,9 @@
+---
+description: >-
+  Install fastapi-gcp-tasks and run your first FastAPI background task on Google Cloud Tasks,
+  locally against the Cloud Tasks emulator.
+---
+
 # Getting started
 
 ## Installation
@@ -6,7 +12,7 @@
 pip install fastapi-gcp-tasks
 ```
 
-Python 3.11+ is required.
+Python 3.12+ and FastAPI 0.137+ are required.
 
 ## Your first delayed task
 
@@ -31,8 +37,8 @@ client = emulator_client() if IS_LOCAL else None
 
 DelayedRoute = DelayedRouteBuilder(
     client=client,
-    # Base URL where the task server is hosted
-    base_url="http://localhost:8000",
+    # Externally reachable URL prefix where the task routes are hosted
+    callback_base_url="http://localhost:8000",
     # Full queue path where tasks will be sent
     queue_path=queue_path(
         project="gcp-project-id",

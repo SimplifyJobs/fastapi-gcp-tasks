@@ -1,3 +1,9 @@
+---
+description: >-
+  Run FastAPI endpoints on a cron schedule with Google Cloud Scheduler — a serverless
+  replacement for celery beat periodic tasks.
+---
+
 # Scheduled tasks
 
 Scheduled tasks are the Cloud Scheduler half of the library: run any FastAPI endpoint on a cron schedule —
@@ -33,7 +39,8 @@ pretzel_day.scheduler(
 ```
 
 `.scheduler(...)` configures the job (name, cron schedule, time zone, retry config); `.schedule(...)` takes
-the endpoint's own keyword arguments, which become the job's HTTP body/params.
+the endpoint's own arguments, which become the job's HTTP body/params under the
+[same rules as `.delay()`](delayed-tasks.md#what-you-can-pass).
 
 ## Idempotent job creation
 

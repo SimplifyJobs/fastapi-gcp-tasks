@@ -1,3 +1,9 @@
+---
+description: >-
+  Deploy FastAPI background task workers to Google Cloud Run with OIDC-authenticated
+  Cloud Tasks and Cloud Scheduler requests.
+---
+
 # Deploying to Cloud Run
 
 Running on Cloud Run with authentication needs us to supply an OIDC token. To do that we can use a
@@ -17,16 +23,16 @@ from fastapi_gcp_tasks.hooks import oidc_delayed_hook
 from fastapi_gcp_tasks.utils import queue_path
 
 # URL of the Cloud Run service
-base_url = "https://hello-randomchars-el.a.run.app"
+service_url = "https://hello-randomchars-el.a.run.app"
 
 DelayedRoute = DelayedRouteBuilder(
-    base_url=base_url,
+    callback_base_url=service_url,
     queue_path=queue_path(...),
     pre_create_hook=oidc_delayed_hook(
         token=tasks_v2.OidcToken(
             # Service account that you created
             service_account_email="fastapi-gcp-tasks@gcp-project-id.iam.gserviceaccount.com",
-            audience=base_url,
+            audience=service_url,
         ),
     ),
 )

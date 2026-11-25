@@ -54,8 +54,10 @@ async def hello(
 app = FastAPI()
 
 
+# A plain `def`: the sync `.delay()` makes a blocking gRPC call, so FastAPI runs this in its
+# threadpool instead of stalling the event loop. See examples/full for `await .delay()`.
 @app.get("/trigger")
-async def trigger() -> dict[str, str]:
+def trigger() -> dict[str, str]:
     hello.delay(p=Payload(message="Triggered task"))
     return {"message": "Basic hello task triggered"}
 
