@@ -75,8 +75,9 @@ class AsyncScheduler(BaseScheduler):
                 if not self._job_changed(job=existing, request=request):
                     return
 
-            # Delete and create job
-            await self.delete()
+            # Delete and create job. The request's name is the one looked up and created,
+            # and a pre-create hook may have changed it.
+            await self._delete_job(name=request.job.name)
             if await self._create(request=request):
                 return
             # Another instance recreated the job between our delete and our create.
@@ -114,9 +115,12 @@ class AsyncScheduler(BaseScheduler):
         Returns True if the job was deleted and False if it did not exist, so it is safe
         to call from several instances at once. Any other error is raised.
         """
+        return await self._delete_job(name=self.job_id)
+
+    async def _delete_job(self, *, name: str) -> bool:
         client = await self.client_provider.get()
         try:
-            await client.delete_job(name=self.job_id, timeout=self.job_create_timeout)
+            await client.delete_job(name=name, timeout=self.job_create_timeout)
         except NotFound:
             return False
         return True
