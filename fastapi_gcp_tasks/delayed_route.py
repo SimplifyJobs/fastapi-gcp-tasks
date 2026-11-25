@@ -79,6 +79,10 @@ def DelayedRouteBuilder(  # noqa: N802
             endpoint_defaults = getattr(self.endpoint, "_delay_options", None)
             if endpoint_defaults:
                 opts.update(endpoint_defaults)
+            if "callback_base_url" in options or "base_url" in options:
+                # A per-call URL replaces the endpoint's default, whichever of the two names each used
+                opts.pop("callback_base_url", None)
+                opts.pop("base_url", None)
             opts.update(options)
 
             # An async client here (e.g. via task_default_options) would make

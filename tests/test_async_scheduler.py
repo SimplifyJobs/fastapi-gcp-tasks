@@ -45,13 +45,13 @@ def _mock_async_client() -> MagicMock:
 
 
 def _make_scheduler(client: Any, **kwargs: Any) -> AsyncScheduler:
+    kwargs.setdefault("pre_create_hook", noop_hook)
     provider = AsyncClientProvider(client=client, client_cls=scheduler_v1.CloudSchedulerAsyncClient)
     return AsyncScheduler(
         route=_make_route(),
         base_url=BASE_URL,
         location_path=LOCATION_PATH,
         schedule="*/5 * * * *",
-        pre_create_hook=noop_hook,
         client_provider=provider,
         name="test-job",
         **kwargs,
@@ -161,6 +161,23 @@ class TestAsyncScheduler:
             await scheduler.schedule()
 
         assert client.create_job.await_count == 3
+
+    async def test_replaces_the_job_the_hook_named(self) -> None:
+        """A pre-create hook can rename the job; the renamed job is the one to replace, not the original name."""
+
+        def staging(request: scheduler_v1.CreateJobRequest) -> scheduler_v1.CreateJobRequest:
+            request.job.name += "-staging"
+            return request
+
+        client = _mock_async_client()
+        scheduler = _make_scheduler(client, pre_create_hook=staging)
+        hooked_name = f"{LOCATION_PATH}/jobs/test-job-staging"
+        client.get_job = AsyncMock(return_value=scheduler_v1.Job(name=hooked_name, schedule="0 0 * * *"))
+
+        await scheduler.schedule()
+
+        client.delete_job.assert_awaited_once_with(name=hooked_name, timeout=scheduler.job_create_timeout)
+        assert client.create_job.await_args.kwargs["request"].job.name == hooked_name
 
     async def test_schedule_skips_unchanged_job(self) -> None:
         """An identical existing job should not be recreated."""

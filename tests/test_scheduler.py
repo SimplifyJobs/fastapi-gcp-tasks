@@ -40,12 +40,12 @@ def _mock_client() -> MagicMock:
 
 
 def _make_scheduler(client: Any, **kwargs: Any) -> Scheduler:
+    kwargs.setdefault("pre_create_hook", noop_hook)
     return Scheduler(
         route=_make_route(),
         base_url=BASE_URL,
         location_path=LOCATION_PATH,
         schedule="*/5 * * * *",
-        pre_create_hook=noop_hook,
         client=client,
         name="test-job",
         **kwargs,
@@ -181,6 +181,25 @@ class TestSchedule:
 
         client.get_job.assert_not_called()
         assert client.create_job.call_count == 3
+
+    def test_replaces_the_job_the_hook_named(self) -> None:
+        """A pre-create hook can rename the job; the renamed job is the one to replace, not the original name."""
+
+        def staging(request: scheduler_v1.CreateJobRequest) -> scheduler_v1.CreateJobRequest:
+            request.job.name += "-staging"
+            return request
+
+        client = _mock_client()
+        scheduler = _make_scheduler(client, pre_create_hook=staging)
+        hooked_name = f"{LOCATION_PATH}/jobs/test-job-staging"
+        client.get_job.side_effect = None
+        client.get_job.return_value = scheduler_v1.Job(name=hooked_name, schedule="0 0 * * *")
+
+        scheduler.schedule()
+
+        client.get_job.assert_called_once_with(name=hooked_name)
+        client.delete_job.assert_called_once_with(name=hooked_name, timeout=scheduler.job_create_timeout)
+        assert client.create_job.call_args.kwargs["request"].job.name == hooked_name
 
     def test_force_recreates_without_lookup(self) -> None:
         """force=True should skip the diff and always delete and recreate."""

@@ -60,7 +60,8 @@ pretzel_day.scheduler(name="pretzel-day-9AM-scranton", schedule="0 9 * * 5").del
 ```
 
 `.delete()` returns `True` when the job was deleted and `False` when there was no such job, so it is safe to
-call from several instances. Any other failure, such as missing permissions, is raised.
+call from several instances. Any other failure, such as missing permissions, is raised. It deletes the job
+under the `name` given to `.scheduler()`; a job that a `pre_create_hook` renamed is not found under that name.
 
 See [Configuration](configuration.md#scheduledroutebuilder) for all options, and
 [Async usage](async.md) for `AsyncScheduledRouteBuilder`, whose `.schedule()`/`.delete()` are coroutines.

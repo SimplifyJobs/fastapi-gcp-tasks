@@ -184,10 +184,10 @@ make_chili.options(countdown=1800).delay(...)
 | Several bodies, or `Body(embed=True)` | One JSON object keyed by parameter name |
 
 Arguments are validated before the task is created, and unknown arguments raise `TypeError`, so mistakes fail
-where you call `.delay()` instead of on the worker. Parameters that belong to a dependency (for example an
-`Authorization` header checked by `Depends(...)`) are never required here, since a hook or Cloud Tasks itself
-usually supplies them, but you can pass them by name. `Form()` and `File()` parameters are not supported: task
-bodies are always JSON.
+where you call `.delay()` instead of on the worker. Query, header and cookie parameters that belong to a
+dependency (for example an `Authorization` header checked by `Depends(...)`) are never required here, since a
+hook or Cloud Tasks itself usually supplies them, but you can pass them by name. Body parameters are always the
+caller's to supply. `Form()` and `File()` parameters are not supported: task bodies are always JSON.
 
 ### Scheduled Task
 

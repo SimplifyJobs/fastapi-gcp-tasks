@@ -6,13 +6,12 @@ FastAPI app, asserting that the worker receives exactly what the caller passed.
 """
 
 # Standard Library Imports
-import asyncio
 import enum
 import json
 from datetime import datetime
 from typing import Annotated, Any
 from unittest.mock import AsyncMock, MagicMock
-from urllib.parse import parse_qsl, unquote, urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 # Third Party Imports
 import pytest
@@ -33,6 +32,7 @@ from fastapi_gcp_tasks import (
     as_scheduled_task,
 )
 from fastapi_gcp_tasks.exception import MissingParamError, WrongTypeError
+from tests.helpers import replay
 
 CALLBACK_BASE_URL = "https://worker.example.com/tasks"
 QUEUE_PATH = "projects/test-project/locations/us-central1/queues/test-queue"
@@ -291,40 +291,8 @@ app.include_router(router, prefix="/tasks")
 
 
 def _replay(http_request: Any, *, extra_headers: dict[str, str] | None = None) -> tuple[int, Any]:
-    """Send a built task request straight into the ASGI app and return (status, json body)."""
-    target = getattr(http_request, "url", None) or http_request.uri
-    parts = urlsplit(target)
-    request_headers = {**dict(http_request.headers), **(extra_headers or {})}
-    scope = {
-        "type": "http",
-        "asgi": {"version": "3.0"},
-        "http_version": "1.1",
-        "method": "POST",
-        "scheme": parts.scheme,
-        "path": unquote(parts.path),
-        "raw_path": parts.path.encode(),
-        "query_string": parts.query.encode(),
-        "headers": [(k.lower().encode(), v.encode()) for k, v in request_headers.items()],
-        "server": (parts.hostname, 443),
-        "client": ("127.0.0.1", 1234),
-    }
-    sent: list[dict[str, Any]] = []
-    delivered = False
-
-    async def receive() -> dict[str, Any]:
-        nonlocal delivered
-        if delivered:
-            return {"type": "http.disconnect"}
-        delivered = True
-        return {"type": "http.request", "body": bytes(http_request.body), "more_body": False}
-
-    async def send(message: dict[str, Any]) -> None:
-        sent.append(message)
-
-    asyncio.run(app(scope, receive, send))  # type: ignore[arg-type]
-    status = next(m["status"] for m in sent if m["type"] == "http.response.start")
-    payload = b"".join(m.get("body", b"") for m in sent if m["type"] == "http.response.body")
-    return status, json.loads(payload)
+    """Send a built task request straight into this module's app and return (status, json body)."""
+    return replay(app, http_request, extra_headers=extra_headers)
 
 
 def _http(request: Any) -> Any:
